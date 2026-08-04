@@ -1,0 +1,24 @@
+# ---------------------------------------------------------------------------
+# Información operativa: NUNCA debe subirse al repositorio.
+# Las mallas y los reportes traen nombres, cédulas y datos personales.
+# ---------------------------------------------------------------------------
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+!plantilla-*.csv
+
+# Respaldos generados por el panel (contienen los datos cargados)
+respaldo-*.json
+backup-*.json
+
+# Documentos de la base de conocimiento
+*.pdf
+
+# Sistema y editores
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+node_modules/

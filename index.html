@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de Supervisión de Operaciones</title>
+<meta name="description" content="Panel para supervisores de operaciones: rendimiento de agentes, mallas de turnos y base de conocimientos.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%235B21B6'/><path d='M24 68V44M42 68V30M60 68V52M78 68V36' stroke='white' stroke-width='9' stroke-linecap='round'/></svg>">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body data-palette="#4a3aa7,#eb6834,#1baf7a,#eda100,#2a78d6,#e34948">
+
+<!-- ============================ BARRA SUPERIOR ============================ -->
+<header class="app-bar">
+  <div class="app-bar__top">
+    <div class="brand">
+      <div class="brand__mark" aria-hidden="true">
+        <svg viewBox="0 0 100 100" width="34" height="34"><rect width="100" height="100" rx="24" fill="url(#bg)"/><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#2563EB"/></linearGradient></defs><path d="M24 70V46M42 70V30M60 70V54M78 70V38" stroke="white" stroke-width="10" stroke-linecap="round"/></svg>
+      </div>
+      <div class="brand__text">
+        <strong>Panel de Supervisión</strong>
+        <span>Operaciones · Rendimiento, Turnos y Conocimiento</span>
+      </div>
+    </div>
+
+    <div class="app-bar__actions">
+      <span class="storage-pill" id="storagePill" title="Estado del almacenamiento local">Cargando…</span>
+      <button class="btn btn--ghost" type="button" onclick="App.toggleTheme()" id="themeBtn" title="Cambiar tema claro/oscuro">
+        <span class="ico" aria-hidden="true">◐</span> Tema
+      </button>
+      <button class="btn btn--ghost" type="button" onclick="App.go('ajustes')" title="Ajustes y respaldo">
+        <span class="ico" aria-hidden="true">⚙</span> Ajustes
+      </button>
+    </div>
+  </div>
+
+  <!-- MENÚ PRINCIPAL: botones onclick -->
+  <nav class="main-nav" id="mainNav" aria-label="Menú principal">
+    <button type="button" class="nav-btn is-active" data-view="rendimiento" onclick="App.go('rendimiento')"><span class="ico">📈</span> Rendimiento</button>
+    <button type="button" class="nav-btn" data-view="agentes" onclick="App.go('agentes')"><span class="ico">👤</span> Por agente</button>
+    <button type="button" class="nav-btn" data-view="turnos" onclick="App.go('turnos')"><span class="ico">🗓</span> Turnos</button>
+    <button type="button" class="nav-btn" data-view="conocimientos" onclick="App.go('conocimientos')"><span class="ico">📚</span> Conocimientos</button>
+    <button type="button" class="nav-btn" data-view="ajustes" onclick="App.go('ajustes')"><span class="ico">⚙</span> Ajustes</button>
+  </nav>
+</header>
+
+<main class="app-main">
+
+<!-- ================================================================== -->
+<!-- ========================= VISTA: RENDIMIENTO ====================== -->
+<!-- ================================================================== -->
+<section class="view is-active" id="view-rendimiento">
+  <div class="subnav" role="tablist">
+    <button type="button" class="tab-btn is-active" data-tab="r-panel"    onclick="App.tab('rendimiento','r-panel')">Panel general</button>
+    <button type="button" class="tab-btn" data-tab="r-ranking"  onclick="App.tab('rendimiento','r-ranking')">Ranking</button>
+    <button type="button" class="tab-btn" data-tab="r-skills"   onclick="App.tab('rendimiento','r-skills')">Por skill</button>
+    <button type="button" class="tab-btn" data-tab="r-datos"    onclick="App.tab('rendimiento','r-datos')">Detalle de datos</button>
+    <button type="button" class="tab-btn" data-tab="r-carga"    onclick="App.tab('rendimiento','r-carga')">Cargar datos</button>
+    <button type="button" class="tab-btn" data-tab="r-indicadores" onclick="App.tab('rendimiento','r-indicadores')">Indicadores y metas</button>
+  </div>
+
+  <!-- Filtros globales de rendimiento -->
+  <div class="filterbar" id="rendFilters">
+    <div class="field">
+      <label for="fDesde">Desde</label>
+      <input type="date" id="fDesde" onchange="Rend.onFilter()">
+    </div>
+    <div class="field">
+      <label for="fHasta">Hasta</label>
+      <input type="date" id="fHasta" onchange="Rend.onFilter()">
+    </div>
+    <div class="field">
+      <label for="fSkill">Skill</label>
+      <select id="fSkill" onchange="Rend.onFilter()"><option value="">Todos</option></select>
+    </div>
+    <div class="field">
+      <label for="fBuscar">Buscar agente</label>
+      <input type="search" id="fBuscar" placeholder="Nombre o documento" oninput="Rend.onFilter()">
+    </div>
+    <div class="field field--presets">
+      <label>Periodo rápido</label>
+      <div class="chipset">
+        <button type="button" class="chip" onclick="Rend.preset('hoy')">Hoy</button>
+        <button type="button" class="chip" onclick="Rend.preset('7')">7 días</button>
+        <button type="button" class="chip" onclick="Rend.preset('30')">30 días</button>
+        <button type="button" class="chip" onclick="Rend.preset('mes')">Mes actual</button>
+        <button type="button" class="chip" onclick="Rend.preset('todo')">Todo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL GENERAL -->
+  <div class="tabpanel is-active" id="tab-r-panel">
+    <div class="kpi-row" id="rKpis"></div>
+    <div class="grid grid--2">
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title">Tendencia diaria del equipo</h3>
+            <p class="card__sub" id="rTrendSub">Promedio del equipo por día</p>
+          </div>
+          <div class="card__tools">
+            <select id="rTrendMetric" onchange="Rend.renderPanel()" class="mini-select" aria-label="Indicador a graficar"></select>
+            <button type="button" class="link-btn" onclick="Chart.toggleTable('rTrend')">Ver tabla</button>
+          </div>
+        </div>
+        <div class="chart-host" id="rTrend"></div>
+      </div>
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title">Cumplimiento por indicador</h3>
+            <p class="card__sub">Promedio del periodo contra la meta configurada</p>
+          </div>
+        </div>
+        <div id="rMeters" class="meter-list"></div>
+      </div>
+    </div>
+
+    <div class="grid grid--2">
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title">Mejores 5 agentes</h3>
+            <p class="card__sub">Por puntaje global ponderado</p>
+          </div>
+        </div>
+        <div class="chart-host" id="rTop"></div>
+      </div>
+      <div class="card">
+        <div class="card__head">
+          <div>
+            <h3 class="card__title">Oportunidades de mejora</h3>
+            <p class="card__sub">5 agentes con menor puntaje global</p>
+          </div>
+        </div>
+        <div class="chart-host" id="rBottom"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RANKING -->
+  <div class="tabpanel" id="tab-r-ranking">
+    <div class="card">
+      <div class="card__head">
+        <div>
+          <h3 class="card__title">Ranking del equipo</h3>
+          <p class="card__sub">Puntaje global = promedio ponderado del cumplimiento de cada indicador contra su meta</p>
+        </div>
+        <div class="card__tools">
+          <button type="button" class="btn btn--ghost btn--sm" onclick="Rend.exportRanking()">Exportar CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap" id="rRankingTable"></div>
+    </div>
+  </div>
+
+  <!-- POR SKILL -->
+  <div class="tabpanel" id="tab-r-skills">
+    <div class="card">
+      <div class="card__head">
+        <div>
+          <h3 class="card__title">Comparativo por skill</h3>
+          <p class="card__sub">Promedio del indicador seleccionado en cada skill</p>
+        </div>
+        <div class="card__tools">
+          <select id="rSkillMetric" onchange="Rend.renderSkills()" class="mini-select" aria-label="Indicador"></select>
+          <button type="button" class="link-btn" onclick="Chart.toggleTable('rSkillBar')">Ver tabla</button>
+        </div>
+      </div>
+      <div class="chart-host" id="rSkillBar"></div>
+    </div>
+    <div class="card">
+      <div class="card__head">
+        <div>
+          <h3 class="card__title">Evolución diaria por skill</h3>
+          <p class="card__sub">Hasta 6 skills; el resto se agrupa para mantener el gráfico legible</p>
+        </div>
+        <div class="card__tools"><button type="button" class="link-btn" onclick="Chart.toggleTable('rSkillLine')">Ver tabla</button></div>
+      </div>
+      <div class="chart-host" id="rSkillLine"></div>
+    </div>
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Resumen por skill</h3><p class="card__sub">Todos los indicadores</p></div></div>
+      <div class="table-wrap" id="rSkillTable"></div>
+    </div>
+  </div>
+
+  <!-- DETALLE DE DATOS -->
+  <div class="tabpanel" id="tab-r-datos">
+    <div class="card">
+      <div class="card__head">
+        <div>
+          <h3 class="card__title">Registros cargados</h3>
+          <p class="card__sub" id="rDatosSub">Doble clic en una celda para editarla</p>
+        </div>
+        <div class="card__tools">
+          <button type="button" class="btn btn--ghost btn--sm" onclick="Rend.exportRegistros()">Exportar CSV</button>
+          <button type="button" class="btn btn--danger btn--sm" onclick="Rend.borrarFiltrados()">Borrar lo filtrado</button>
+        </div>
+      </div>
+      <div class="table-wrap table-wrap--tall" id="rDataTable"></div>
+    </div>
+  </div>
+
+  <!-- CARGA DE DATOS -->
+  <div class="tabpanel" id="tab-r-carga">
+    <div class="grid grid--2">
+
+      <div class="card">
+        <div class="card__head">
+          <div><h3 class="card__title">Carga manual</h3><p class="card__sub">Registra el día de un agente en segundos</p></div>
+        </div>
+        <form id="formManual" class="form-grid" onsubmit="Rend.guardarManual(event)">
+          <div class="field"><label for="mFecha">Fecha *</label><input type="date" id="mFecha" required></div>
+          <div class="field"><label for="mAgente">Agente *</label><input type="text" id="mAgente" list="dlAgentes" placeholder="Nombre del asesor" required></div>
+          <div class="field"><label for="mDoc">Documento / ID</label><input type="text" id="mDoc" placeholder="Opcional"></div>
+          <div class="field"><label for="mSkill">Skill</label><input type="text" id="mSkill" list="dlSkills" placeholder="Ej. Ventas"></div>
+          <div id="mMetricFields" class="form-grid form-grid--sub"></div>
+          <div class="field field--full"><label for="mNota">Observación</label><textarea id="mNota" rows="2" placeholder="Opcional"></textarea></div>
+          <div class="field field--full form-actions">
+            <button class="btn btn--primary" type="submit">Guardar registro</button>
+            <button class="btn btn--ghost" type="reset">Limpiar</button>
+            <span class="hint">Si ya existe un registro de ese agente en esa fecha, se actualiza.</span>
+          </div>
+        </form>
+        <datalist id="dlAgentes"></datalist>
+        <datalist id="dlSkills"></datalist>
+      </div>
+
+      <div class="card">
+        <div class="card__head">
+          <div><h3 class="card__title">Carga por Excel o CSV</h3><p class="card__sub">Archivos .xlsx, .xlsm o .csv — se procesan en tu equipo, nada se envía a internet</p></div>
+        </div>
+        <div class="dropzone" id="dzRend"
+             onclick="document.getElementById('fileRend').click()"
+             ondragover="event.preventDefault();this.classList.add('is-over')"
+             ondragleave="this.classList.remove('is-over')"
+             ondrop="Rend.onDrop(event)">
+          <div class="dropzone__icon">⬆</div>
+          <p><strong>Arrastra tu archivo aquí</strong> o haz clic para buscarlo</p>
+          <span class="hint">La primera fila debe contener los encabezados</span>
+          <input type="file" id="fileRend" accept=".xlsx,.xlsm,.csv,.txt" hidden onchange="Rend.onFile(event)">
+        </div>
+        <div class="stack">
+          <button class="btn btn--ghost btn--sm" type="button" onclick="Rend.plantilla()">Descargar plantilla CSV</button>
+          <button class="btn btn--ghost btn--sm" type="button" onclick="App.cargarDemo()">Cargar datos de ejemplo</button>
+        </div>
+        <div id="rendMapper" class="mapper"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- INDICADORES -->
+  <div class="tabpanel" id="tab-r-indicadores">
+    <div class="card">
+      <div class="card__head">
+        <div>
+          <h3 class="card__title">Indicadores, metas y peso</h3>
+          <p class="card__sub">Define qué mides. Cada indicador se convierte en columna de carga, en gráfico y en parte del puntaje global.</p>
+        </div>
+        <div class="card__tools">
+          <button type="button" class="btn btn--primary btn--sm" onclick="Rend.nuevoIndicador()">+ Nuevo indicador</button>
+          <button type="button" class="btn btn--ghost btn--sm" onclick="Rend.restaurarIndicadores()">Restaurar sugeridos</button>
+        </div>
+      </div>
+      <div class="table-wrap" id="rMetricTable"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<!-- ========================= VISTA: POR AGENTE ======================= -->
+<!-- ================================================================== -->
+<section class="view" id="view-agentes">
+  <div class="subnav" role="tablist">
+    <button type="button" class="tab-btn is-active" data-tab="a-individual" onclick="App.tab('agentes','a-individual')">Gráficos individuales</button>
+    <button type="button" class="tab-btn" data-tab="a-ficha" onclick="App.tab('agentes','a-ficha')">Ficha completa</button>
+    <button type="button" class="tab-btn" data-tab="a-comparar" onclick="App.tab('agentes','a-comparar')">Comparar agentes</button>
+  </div>
+
+  <!-- SELECTOR DE AGENTES -->
+  <div class="picker card">
+    <div class="picker__head">
+      <div>
+        <h3 class="card__title">Agentes en el tablero</h3>
+        <p class="card__sub">Agrega los agentes que quieras seguir: cada uno tendrá su propio gráfico individual.</p>
+      </div>
+      <div class="card__tools">
+        <input type="search" id="aBuscar" class="mini-input" placeholder="Buscar agente…" oninput="Agentes.renderPicker()">
+        <button type="button" class="btn btn--ghost btn--sm" onclick="Agentes.seleccionarTodos()">Agregar todos</button>
+        <button type="button" class="btn btn--ghost btn--sm" onclick="Agentes.limpiarSeleccion()">Quitar todos</button>
+      </div>
+    </div>
+    <div class="agent-chips" id="aPicker"></div>
+  </div>
+
+  <div class="filterbar filterbar--compact">
+    <div class="field">
+      <label for="aMetric">Indicador del gráfico</label>
+      <select id="aMetric" onchange="Agentes.render()"></select>
+    </div>
+    <div class="field">
+      <label for="aDesde">Desde</label>
+      <input type="date" id="aDesde" onchange="Agentes.render()">
+    </div>
+    <div class="field">
+      <label for="aHasta">Hasta</label>
+      <input type="date" id="aHasta" onchange="Agentes.render()">
+    </div>
+    <div class="field">
+      <label for="aTipo">Tipo de gráfico</label>
+      <select id="aTipo" onchange="Agentes.render()">
+        <option value="line">Línea de tendencia</option>
+        <option value="bar">Barras por día</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="aOrden">Ordenar tarjetas</label>
+      <select id="aOrden" onchange="Agentes.render()">
+        <option value="nombre">Nombre</option>
+        <option value="mejor">Mejor cumplimiento</option>
+        <option value="peor">Menor cumplimiento</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- GRÁFICOS INDIVIDUALES (uno por agente) -->
+  <div class="tabpanel is-active" id="tab-a-individual">
+    <div id="aGrid" class="agent-grid"></div>
+  </div>
+
+  <!-- FICHA COMPLETA -->
+  <div class="tabpanel" id="tab-a-ficha">
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Ficha individual</h3><p class="card__sub">Todos los indicadores de un agente, cada uno en su propio gráfico</p></div>
+        <div class="card__tools">
+          <select id="aFichaSel" class="mini-select" onchange="Agentes.renderFicha()" aria-label="Agente"></select>
+        </div>
+      </div>
+      <div id="aFicha"></div>
+    </div>
+  </div>
+
+  <!-- COMPARAR -->
+  <div class="tabpanel" id="tab-a-comparar">
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Comparativa en un mismo eje</h3><p class="card__sub">Hasta 6 agentes a la vez para que las series sigan siendo distinguibles</p></div>
+        <div class="card__tools"><button type="button" class="link-btn" onclick="Chart.toggleTable('aCompare')">Ver tabla</button></div>
+      </div>
+      <div class="chart-host" id="aCompare"></div>
+    </div>
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Resumen comparativo</h3><p class="card__sub">Promedio del periodo por indicador</p></div></div>
+      <div class="table-wrap" id="aCompareTable"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<!-- =========================== VISTA: TURNOS ========================= -->
+<!-- ================================================================== -->
+<section class="view" id="view-turnos">
+  <div class="subnav" role="tablist">
+    <button type="button" class="tab-btn is-active" data-tab="t-cobertura" onclick="App.tab('turnos','t-cobertura')">Cobertura por skill</button>
+    <button type="button" class="tab-btn" data-tab="t-malla"     onclick="App.tab('turnos','t-malla')">Malla del día</button>
+    <button type="button" class="tab-btn" data-tab="t-semana"    onclick="App.tab('turnos','t-semana')">Vista semanal</button>
+    <button type="button" class="tab-btn" data-tab="t-carga"     onclick="App.tab('turnos','t-carga')">Cargar malla</button>
+    <button type="button" class="tab-btn" data-tab="t-requerido" onclick="App.tab('turnos','t-requerido')">Requerido por franja</button>
+  </div>
+
+  <div class="filterbar">
+    <div class="field"><label for="tFecha">Fecha</label><input type="date" id="tFecha" onchange="Turnos.render()"></div>
+    <div class="field"><label for="tSkill">Skill</label><select id="tSkill" onchange="Turnos.render()"><option value="">Todos</option></select></div>
+    <div class="field"><label for="tIntervalo">Franja</label>
+      <select id="tIntervalo" onchange="Turnos.render()">
+        <option value="60">60 minutos</option>
+        <option value="30" selected>30 minutos</option>
+        <option value="15">15 minutos</option>
+      </select>
+    </div>
+    <div class="field"><label for="tBreaks">Cómo contar</label>
+      <select id="tBreaks" onchange="Turnos.render()">
+        <option value="1">Conectados reales (descuenta todas las pausas)</option>
+        <option value="2">Descontar solo almuerzo</option>
+        <option value="0">Turno completo (sin descontar)</option>
+      </select>
+    </div>
+    <div class="field field--presets">
+      <label>Atajos</label>
+      <div class="chipset">
+        <button type="button" class="chip" onclick="Turnos.hoy()">Hoy</button>
+        <button type="button" class="chip" onclick="Turnos.mover(-1)">◀ Día anterior</button>
+        <button type="button" class="chip" onclick="Turnos.mover(1)">Día siguiente ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COBERTURA -->
+  <div class="tabpanel is-active" id="tab-t-cobertura">
+    <div class="kpi-row" id="tKpis"></div>
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Asesores conectados por franja</h3><p class="card__sub" id="tCovSub">Según la malla configurada</p></div>
+        <div class="card__tools"><button type="button" class="link-btn" onclick="Chart.toggleTable('tCoverage')">Ver tabla</button></div>
+      </div>
+      <div class="chart-host chart-host--tall" id="tCoverage"></div>
+    </div>
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Mapa de calor: skill × franja horaria</h3><p class="card__sub">Cantidad de asesores conectados en cada intervalo</p></div>
+        <div class="card__tools"><button type="button" class="link-btn" onclick="Chart.toggleTable('tHeat')">Ver tabla</button></div>
+      </div>
+      <div class="chart-host" id="tHeat"></div>
+    </div>
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Requerido contra programado</h3><p class="card__sub">Diferencia por franja: azul es superávit, rojo es déficit de personal</p></div>
+        <div class="card__tools"><button type="button" class="link-btn" onclick="Chart.toggleTable('tGap')">Ver tabla</button></div>
+      </div>
+      <div class="chart-host" id="tGap"></div>
+    </div>
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Resumen por skill</h3><p class="card__sub">Pico, valle, promedio y horas programadas</p></div></div>
+      <div class="table-wrap" id="tSkillSummary"></div>
+    </div>
+  </div>
+
+  <!-- MALLA DEL DÍA -->
+  <div class="tabpanel" id="tab-t-malla">
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Malla del día</h3><p class="card__sub" id="tMallaSub">Línea de tiempo por asesor</p></div>
+        <div class="card__tools">
+          <button type="button" class="btn btn--ghost btn--sm" onclick="Turnos.exportarMalla()">Exportar CSV</button>
+          <button type="button" class="btn btn--primary btn--sm" onclick="Turnos.nuevoTurno()">+ Agregar turno</button>
+        </div>
+      </div>
+      <div id="tGantt" class="gantt"></div>
+    </div>
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Detalle de turnos</h3><p class="card__sub">Editable</p></div></div>
+      <div class="table-wrap table-wrap--tall" id="tTable"></div>
+    </div>
+  </div>
+
+  <!-- SEMANAL -->
+  <div class="tabpanel" id="tab-t-semana">
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Personal programado por día</h3><p class="card__sub">Semana de la fecha seleccionada</p></div>
+        <div class="card__tools"><button type="button" class="link-btn" onclick="Chart.toggleTable('tWeek')">Ver tabla</button></div>
+      </div>
+      <div class="chart-host" id="tWeek"></div>
+    </div>
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Cuadro semanal por asesor</h3><p class="card__sub">Turno asignado cada día</p></div></div>
+      <div class="table-wrap table-wrap--tall" id="tWeekTable"></div>
+    </div>
+  </div>
+
+  <!-- CARGAR MALLA -->
+  <div class="tabpanel" id="tab-t-carga">
+    <div class="grid grid--2">
+      <div class="card">
+        <div class="card__head"><div><h3 class="card__title">Cargar malla desde Excel o CSV</h3><p class="card__sub">Una fila por asesor y día</p></div></div>
+        <div class="dropzone" id="dzTurnos"
+             onclick="document.getElementById('fileTurnos').click()"
+             ondragover="event.preventDefault();this.classList.add('is-over')"
+             ondragleave="this.classList.remove('is-over')"
+             ondrop="Turnos.onDrop(event)">
+          <div class="dropzone__icon">⬆</div>
+          <p><strong>Arrastra la malla aquí</strong> o haz clic para buscarla</p>
+          <span class="hint">Columnas sugeridas: fecha, agente, skill, entrada, salida, break, almuerzo, novedad</span>
+          <input type="file" id="fileTurnos" accept=".xlsx,.xlsm,.csv,.txt" hidden onchange="Turnos.onFile(event)">
+        </div>
+        <div class="stack">
+          <button class="btn btn--ghost btn--sm" type="button" onclick="Turnos.plantilla()">Descargar plantilla CSV</button>
+          <button class="btn btn--danger btn--sm" type="button" onclick="Turnos.borrarTodo()">Borrar toda la malla</button>
+        </div>
+        <div id="turnosMapper" class="mapper"></div>
+      </div>
+
+      <div class="card">
+        <div class="card__head"><div><h3 class="card__title">Carga manual de turno</h3><p class="card__sub">Para ajustes puntuales o novedades del día</p></div></div>
+        <form class="form-grid" onsubmit="Turnos.guardarManual(event)">
+          <div class="field"><label for="sFecha">Fecha *</label><input type="date" id="sFecha" required></div>
+          <div class="field"><label for="sAgente">Agente *</label><input type="text" id="sAgente" list="dlAgentes" required></div>
+          <div class="field"><label for="sSkill">Skill *</label><input type="text" id="sSkill" list="dlSkills" required></div>
+          <div class="field"><label for="sEstado">Tipo</label>
+            <select id="sEstado">
+              <option value="turno">Turno</option>
+              <option value="descanso">Día de descanso</option>
+              <option value="vacaciones">Vacaciones</option>
+              <option value="incapacidad">Incapacidad</option>
+              <option value="capacitacion">Capacitación</option>
+              <option value="ausencia">Ausencia</option>
+            </select>
+          </div>
+          <div class="field"><label for="sEntrada">Entrada</label><input type="time" id="sEntrada" value="08:00"></div>
+          <div class="field"><label for="sSalida">Salida</label><input type="time" id="sSalida" value="17:00"></div>
+          <div class="field"><label for="sBreakIni">Break inicio</label><input type="time" id="sBreakIni"></div>
+          <div class="field"><label for="sBreakFin">Break fin</label><input type="time" id="sBreakFin"></div>
+          <div class="field"><label for="sAlmIni">Almuerzo inicio</label><input type="time" id="sAlmIni"></div>
+          <div class="field"><label for="sAlmFin">Almuerzo fin</label><input type="time" id="sAlmFin"></div>
+          <div class="field field--full form-actions">
+            <button class="btn btn--primary" type="submit">Guardar turno</button>
+            <span class="hint">Los turnos que cruzan medianoche se calculan correctamente.</span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- REQUERIDO -->
+  <div class="tabpanel" id="tab-t-requerido">
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Personal requerido por franja</h3><p class="card__sub">Define cuántos asesores necesitas por skill en cada hora; el panel calcula el déficit contra la malla.</p></div>
+        <div class="card__tools">
+          <button type="button" class="btn btn--ghost btn--sm" onclick="Turnos.autollenarRequerido()">Llenar con el promedio actual</button>
+          <button type="button" class="btn btn--ghost btn--sm" onclick="Turnos.limpiarRequerido()">Limpiar</button>
+        </div>
+      </div>
+      <div class="table-wrap table-wrap--tall" id="tReqTable"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<!-- ======================== VISTA: CONOCIMIENTOS ===================== -->
+<!-- ================================================================== -->
+<section class="view" id="view-conocimientos">
+  <div class="subnav" role="tablist">
+    <button type="button" class="tab-btn is-active" data-tab="c-biblioteca" onclick="App.tab('conocimientos','c-biblioteca')">Biblioteca</button>
+    <button type="button" class="tab-btn" data-tab="c-gestion" onclick="App.tab('conocimientos','c-gestion')">Gestionar títulos</button>
+    <button type="button" class="tab-btn" data-tab="c-archivos" onclick="App.tab('conocimientos','c-archivos')">Todos los PDF</button>
+  </div>
+
+  <div class="filterbar filterbar--compact">
+    <div class="field field--grow">
+      <label for="cBuscar">Buscar en procesos, notas y archivos</label>
+      <input type="search" id="cBuscar" placeholder="Ej. devolución, retención, escalamiento…" oninput="Conocimientos.render()">
+    </div>
+    <div class="field">
+      <label for="cTitulo">Título</label>
+      <select id="cTitulo" onchange="Conocimientos.render()"><option value="">Todos</option></select>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button type="button" class="btn btn--primary" onclick="Conocimientos.nuevoTitulo()">+ Nuevo título</button>
+    </div>
+  </div>
+
+  <div class="tabpanel is-active" id="tab-c-biblioteca">
+    <div id="cLibrary" class="library"></div>
+  </div>
+
+  <div class="tabpanel" id="tab-c-gestion">
+    <div class="card">
+      <div class="card__head">
+        <div><h3 class="card__title">Estructura del conocimiento</h3><p class="card__sub">Un título agrupa varios procesos; cada proceso tiene sus notas y sus PDF.</p></div>
+        <div class="card__tools"><button type="button" class="btn btn--primary btn--sm" onclick="Conocimientos.nuevoTitulo()">+ Nuevo título</button></div>
+      </div>
+      <div id="cManage" class="manage-list"></div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="tab-c-archivos">
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Documentos cargados</h3><p class="card__sub">Todos los PDF de la base de conocimiento</p></div></div>
+      <div class="table-wrap" id="cFiles"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<!-- =========================== VISTA: AJUSTES ======================== -->
+<!-- ================================================================== -->
+<section class="view" id="view-ajustes">
+  <div class="grid grid--2">
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Respaldo de la información</h3><p class="card__sub">Todo se guarda en este equipo. Exporta con frecuencia o para pasar el panel a otro computador.</p></div></div>
+      <div class="stack stack--col">
+        <button class="btn btn--primary" type="button" onclick="App.exportarRespaldo()">Descargar respaldo completo (.json)</button>
+        <button class="btn btn--ghost" type="button" onclick="document.getElementById('fileBackup').click()">Restaurar desde respaldo</button>
+        <input type="file" id="fileBackup" accept=".json" hidden onchange="App.importarRespaldo(event)">
+        <label class="checkline"><input type="checkbox" id="bkIncluirPdf" checked> Incluir los PDF en el respaldo (el archivo pesa más)</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Datos y mantenimiento</h3><p class="card__sub">Acciones sobre la información almacenada</p></div></div>
+      <div class="stack stack--col">
+        <button class="btn btn--ghost" type="button" onclick="App.cargarDemo()">Cargar datos de ejemplo</button>
+        <button class="btn btn--danger" type="button" onclick="App.borrarTodo()">Borrar toda la información</button>
+      </div>
+      <div class="table-wrap" id="ajStats"></div>
+    </div>
+
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Identidad del panel</h3><p class="card__sub">Personaliza el encabezado</p></div></div>
+      <div class="form-grid">
+        <div class="field field--full"><label for="ajTitulo">Nombre que aparece arriba</label><input type="text" id="ajTitulo" oninput="App.setTitulo(this.value)"></div>
+        <div class="field field--full"><label for="ajSub">Subtítulo</label><input type="text" id="ajSub" oninput="App.setSubtitulo(this.value)"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card__head"><div><h3 class="card__title">Cómo funciona</h3><p class="card__sub">Resumen rápido</p></div></div>
+      <ul class="bullets">
+        <li><strong>Privado por diseño:</strong> los archivos que cargas se leen en tu navegador; no viajan a ningún servidor.</li>
+        <li><strong>Rendimiento:</strong> define tus indicadores y metas, luego carga el Excel o escribe manualmente.</li>
+        <li><strong>Por agente:</strong> agrega los asesores que quieras y cada uno aparece con su propio gráfico.</li>
+        <li><strong>Turnos:</strong> carga la malla y el panel calcula cuántos asesores por skill quedan conectados en cada franja.</li>
+        <li><strong>Conocimientos:</strong> títulos, procesos, notas y PDF adjuntos, todo buscable.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- Capas flotantes -->
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="modalRoot" class="modal-root" hidden></div>
+<div id="tip" class="tip" hidden></div>
+
+<script src="assets/js/core.js"></script>
+<script src="assets/js/sheets.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/rendimiento.js"></script>
+<script src="assets/js/agentes.js"></script>
+<script src="assets/js/turnos.js"></script>
+<script src="assets/js/conocimientos.js"></script>
+<script src="assets/js/demo.js"></script>
+<script>App.init();</script>
+</body>
+</html>
