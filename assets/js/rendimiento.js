@@ -29,7 +29,9 @@ const Rend = {
       if (!sel) return;
       const previo = sel.value;
       sel.innerHTML = inds.map(m => '<option value="' + m.id + '">' + U.esc(m.nombre) + '</option>').join('');
-      if (previo && inds.some(m => m.id === previo)) sel.value = previo;
+      // Nunca arrancar en un indicador vacío
+      if (previo && inds.some(m => m.id === previo) && App.tieneDatos(previo)) sel.value = previo;
+      else { const d = App.primerIndicadorConDatos(); if (d) sel.value = d.id; }
     });
     const sk = document.getElementById('fSkill');
     const prev = sk.value;

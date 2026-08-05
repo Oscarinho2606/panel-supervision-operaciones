@@ -320,6 +320,19 @@ const Informe = {
       if (skill) skillsCargados.push(skill);
     }
 
+    // Los indicadores sin ningún dato se ocultan: si no, quedan columnas vacías
+    // de configuraciones anteriores. Siguen ahí y se pueden reactivar.
+    let ocultos = 0;
+    State.indicadores.forEach(m => {
+      if (m.activo !== false && !State.registros.some(r => r.valores && r.valores[m.id] != null)) {
+        m.activo = false; ocultos++;
+      }
+    });
+
+    // El tablero de "Por agente" arranca con los agentes recién cargados
+    const conDatos = [...new Set(State.registros.map(r => r.agente))];
+    State.ui.agentesSel = conDatos.slice(0, 12);
+
     await App.guardarYa();
     Informe.cerrar();
 
@@ -331,7 +344,8 @@ const Informe = {
     App.toast('Informe cargado',
       totalAgentes + ' agentes · ' + totalInd + ' indicadores con su meta' +
       (skillsCargados.length ? ' · ' + [...new Set(skillsCargados)].join(', ') : '') +
-      (totalRenombrados ? ' · se unificaron ' + totalRenombrados + ' registros de la malla por documento' : ''), 'ok');
+      (ocultos ? ' · se ocultaron ' + ocultos + ' indicadores sin datos' : '') +
+      (totalRenombrados ? ' · se unificaron ' + totalRenombrados + ' registros de la malla' : ''), 'ok');
   },
 
   /** Vuelca una hoja al estado: crea los indicadores y un registro por agente. */

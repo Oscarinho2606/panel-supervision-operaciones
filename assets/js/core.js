@@ -604,6 +604,15 @@ const App = {
   indicadoresActivos() { return State.indicadores.filter(m => m.activo !== false); },
   indicador(id) { return State.indicadores.find(m => m.id === id); },
 
+  /** ¿Este indicador tiene algún valor cargado? */
+  tieneDatos(id) { return State.registros.some(r => r.valores && r.valores[id] != null); },
+
+  /** El primero que sí tenga datos: evita que los gráficos arranquen en blanco. */
+  primerIndicadorConDatos() {
+    const act = App.indicadoresActivos();
+    return act.find(m => m.meta != null && App.tieneDatos(m.id)) || act.find(m => App.tieneDatos(m.id)) || act[0] || null;
+  },
+
   /** Cumplimiento 0..1.5 de un valor contra la meta del indicador. */
   cumplimiento(valor, ind, meta) {
     const m = meta == null ? (ind && ind.meta) : meta;

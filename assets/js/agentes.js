@@ -13,7 +13,9 @@ const Agentes = {
     const inds = App.indicadoresActivos();
     const previo = sel.value;
     sel.innerHTML = inds.map(m => '<option value="' + m.id + '">' + U.esc(m.nombre) + '</option>').join('');
-    if (previo && inds.some(m => m.id === previo)) sel.value = previo;
+    // Si el indicador que estaba elegido no tiene datos, se pasa a uno que sí
+    if (previo && inds.some(m => m.id === previo) && App.tieneDatos(previo)) sel.value = previo;
+    else { const d = App.primerIndicadorConDatos(); if (d) sel.value = d.id; }
 
     Agentes.pintarSkills();
 
