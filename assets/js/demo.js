@@ -36,7 +36,7 @@ const Demo = {
       if (!ok) return;
     }
 
-    State.indicadores = JSON.parse(JSON.stringify(INDICADORES_BASE));
+    State.indicadores = JSON.parse(JSON.stringify(INDICADORES_DEMO));
     State.registros = Demo.registros();
     State.turnos = Demo.turnos();
     State.requerido = Demo.requerido();

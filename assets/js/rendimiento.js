@@ -46,10 +46,14 @@ const Rend = {
 
   pintarCamposManual() {
     const host = document.getElementById('mMetricFields');
-    host.innerHTML = App.indicadoresActivos().map(m =>
-      '<div class="field"><label for="mv-' + m.id + '">' + U.esc(m.nombre) + Rend.sufijo(m) + '</label>' +
-      '<input type="text" id="mv-' + m.id + '" inputmode="decimal" placeholder="' + Rend.placeholder(m) + '"></div>'
-    ).join('');
+    const inds = App.indicadoresActivos();
+    host.innerHTML = inds.length
+      ? inds.map(m =>
+          '<div class="field"><label for="mv-' + m.id + '">' + U.esc(m.nombre) + Rend.sufijo(m) + '</label>' +
+          '<input type="text" id="mv-' + m.id + '" inputmode="decimal" placeholder="' + Rend.placeholder(m) + '"></div>'
+        ).join('')
+      : '<p class="hint" style="grid-column:1/-1">Aún no hay indicadores. Carga tu informe de operaciones y se crearán solos, ' +
+        'o créalos en <strong>Indicadores y metas</strong>.</p>';
   },
 
   sufijo(m) {
@@ -657,6 +661,12 @@ const Rend = {
   /* ---------------------------- Indicadores ------------------------------ */
   renderIndicadores() {
     const host = document.getElementById('rMetricTable');
+    if (!State.indicadores.length) {
+      host.innerHTML = '<div class="empty"><strong>Todavía no hay indicadores</strong>' +
+        'Se crean solos al cargar tu informe de operaciones, tomando el nombre y la meta de cada columna. ' +
+        'También puedes crearlos a mano con «+ Nuevo indicador».</div>';
+      return;
+    }
     host.innerHTML = '<table class="data"><thead><tr>' +
       '<th class="no-sort">Indicador</th><th class="no-sort">Unidad</th><th class="num no-sort">Meta</th>' +
       '<th class="no-sort">Mejor cuando</th><th class="num no-sort">Peso</th><th class="no-sort">Activo</th><th class="no-sort"></th>' +
@@ -747,12 +757,4 @@ const Rend = {
     App.toast('Indicadores eliminados', vacios.length + ' columnas menos', 'ok');
   },
 
-  async restaurarIndicadores() {
-    const ok = await App.confirmar('Restaurar indicadores sugeridos', 'Se agregan los indicadores estándar de operación que no tengas configurados. Los tuyos no se borran.');
-    if (!ok) return;
-    INDICADORES_BASE.forEach(b => { if (!State.indicadores.some(m => m.id === b.id)) State.indicadores.push(JSON.parse(JSON.stringify(b))); });
-    await App.guardarYa();
-    Rend.init(); Agentes.init(); Rend.render();
-    App.toast('Indicadores restaurados', '', 'ok');
-  }
 };

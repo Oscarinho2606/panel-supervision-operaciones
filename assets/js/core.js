@@ -301,7 +301,10 @@ const Store = {
 };
 
 /* -------------------------------- Estado --------------------------------- */
-const INDICADORES_BASE = [
+/* Los indicadores no vienen predefinidos: se crean al cargar el informe, que
+   trae el nombre y la meta de cada uno. Esta lista es solo para los datos de
+   ejemplo de la pestaña Ajustes. */
+const INDICADORES_DEMO = [
   { id: 'llamadas',   nombre: 'Gestiones atendidas', unidad: 'num', meta: 60,  direccion: 'up',   peso: 1, activo: true },
   { id: 'tmo',        nombre: 'TMO',                 unidad: 'seg', meta: 330, direccion: 'down', peso: 1, activo: true },
   { id: 'calidad',    nombre: 'Calidad',             unidad: 'pct', meta: 92,  direccion: 'up',   peso: 1.5, activo: true },
@@ -312,7 +315,7 @@ const INDICADORES_BASE = [
 
 const State = {
   meta: { titulo: 'Panel de Supervisión', subtitulo: 'Operaciones · Rendimiento, Turnos y Conocimiento', tema: 'light' },
-  indicadores: JSON.parse(JSON.stringify(INDICADORES_BASE)),
+  indicadores: [],
   registros: [],
   turnos: [],
   requerido: {},              // { 'skill||HH:MM': cantidad }
@@ -331,7 +334,7 @@ const App = {
     if (guardado) {
       Object.assign(State, guardado);
       if (!State.ui) State.ui = { agentesSel: [], vista: 'rendimiento', tabs: {} };
-      if (!State.indicadores || !State.indicadores.length) State.indicadores = JSON.parse(JSON.stringify(INDICADORES_BASE));
+      if (!State.indicadores) State.indicadores = [];
     }
     App.aplicarTema(State.meta.tema);
     App.pintarIdentidad();
@@ -521,7 +524,7 @@ const App = {
     if (!ok) return;
     await Store.limpiar();
     State.registros = []; State.turnos = []; State.requerido = {}; State.conocimientos = [];
-    State.indicadores = JSON.parse(JSON.stringify(INDICADORES_BASE));
+    State.indicadores = [];
     State.ui = { agentesSel: [], vista: 'rendimiento', tabs: {} };
     await App.guardarYa();
     Rend.init(); Agentes.init(); Turnos.init(); Conocimientos.init();
