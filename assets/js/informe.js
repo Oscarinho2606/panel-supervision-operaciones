@@ -167,17 +167,17 @@ const Informe = {
 
   abrir(libro) {
     // Analiza todas las hojas: un libro puede traer inbound, chat y correos
-    const analisis = [];
+    const analisis = [], noReconocidas = [];
     libro.hojas.forEach(h => {
       const a = Informe.analizar(h);
       if (a) {
         a.skill = Informe.skillDe(h.nombre) || Informe.skillDe(libro.nombre);
         analisis.push(a);
-      }
+      } else noReconocidas.push(h.nombre);
     });
     if (!analisis.length) return false;
 
-    Informe.ctx = { libro: libro, analisis: analisis, actual: 0 };
+    Informe.ctx = { libro: libro, analisis: analisis, noReconocidas: noReconocidas, actual: 0 };
     Informe.pintar();
     return true;
   },
@@ -207,12 +207,29 @@ const Informe = {
     const opcionesSkill = ['INB', 'OUT', 'EMAIL', 'CHAT', 'PQR', 'RRSS', 'BACKOFFICE', 'MONITOREO TRANSACCIONAL']
       .concat(skills).filter((s, i, arr) => arr.indexOf(s) === i);
 
+    const esCsv = /\.(csv|txt)$/i.test(ctx.libro.nombre);
+    let nota = '';
+    if (esCsv) {
+      nota = '<div class="aviso" style="border-radius:10px;border-bottom:0;margin:10px 0"><div>' +
+        '<strong>Este archivo es un CSV y solo puede contener una hoja.</strong>' +
+        'Si tu informe trae chat y correos en otras hojas, guárdalo desde Excel como <strong>.xlsx</strong> ' +
+        '(Archivo → Guardar como → Libro de Excel) y cárgalo así: se importarán todas las hojas de una vez.' +
+        '</div></div>';
+    } else if (ctx.noReconocidas && ctx.noReconocidas.length) {
+      nota = '<div class="aviso" style="border-radius:10px;border-bottom:0;margin:10px 0"><div>' +
+        '<strong>Hay hojas que no tienen formato de informe y se omiten:</strong>' +
+        U.esc(ctx.noReconocidas.join(', ')) + '. Se reconocen las que traen columnas «Cumple» junto a cada indicador.' +
+        '</div></div>';
+    }
+
     host.innerHTML =
       '<div class="mapper__box">' +
         '<div class="mapper__title">Informe de operaciones detectado</div>' +
         '<p class="hint">' + U.esc(ctx.libro.nombre) + '<br>' +
-          '<strong>' + a.datos.length + ' agentes</strong> · <strong>' + a.indicadores.length + ' indicadores</strong> con su meta · ' +
-          'periodo <strong>' + U.esc(a.periodo.etiqueta) + '</strong>. Las columnas «Cumple» se omiten.</p>' +
+          '<strong>' + ctx.analisis.length + ' hoja(s) con datos</strong> · ' +
+          '<strong>' + a.datos.length + ' agentes</strong> en esta · <strong>' + a.indicadores.length + ' indicadores</strong> con su meta · ' +
+          'periodo del archivo <strong>' + U.esc(a.periodo.etiqueta) + '</strong>. Las columnas «Cumple» se omiten.</p>' +
+        nota +
 
         '<div class="mapper__grid">' +
           selectorHoja +
