@@ -108,10 +108,42 @@ Detalles que ya están resueltos:
 - Si la malla solo trae el documento, el nombre se completa cruzando con la hoja de planta del mismo libro.
 - Al importar puedes **elegir qué días cargar**, marcando o desmarcando las fechas encontradas.
 
-### Indicadores de rendimiento
+### Informe de operaciones (con metas)
 
-Una fila por agente y día. Columnas mínimas: `Fecha` y `Agente`; el resto son los
-indicadores que tengas configurados. Descarga la plantilla desde
+Es el formato que se reconoce solo, sin configurar nada. El panel identifica que
+cada indicador ocupa **tres columnas seguidas**:
+
+| … | Resultado del agente | Meta | Cumple |
+|---|---|---|---|
+| ejemplo | `AHT` = 583,80 | `Meta AHT` = 380 | *(se omite)* |
+
+- Da igual el orden dentro de la tripleta: el panel reconoce cuál es la meta por
+  su nombre, así que `Meta_Error Oper inb · Errores Operacionales Inb · Cumple…`
+  funciona igual que `Nota Calidad · Meta Calidad · Cumple Calidad`.
+- Las columnas **«Cumple» se ignoran**; el cumplimiento lo recalcula el panel.
+- **La meta se guarda agente por agente**, no como un valor global: si dos
+  asesores tienen metas distintas, cada uno se evalúa contra la suya.
+- Deduce solo la **unidad** (porcentaje, tiempo, número) y si el indicador es
+  mejor cuando **sube** (calidad, FCR, NPS) o cuando **baja** (AHT, errores,
+  ausentismo, desconexiones). Puedes corregirlo antes de importar.
+- Una meta de **0** (cero errores) se evalúa como cumple / no cumple.
+- Las columnas numéricas **sin meta** (llamadas contestadas, días con gestión)
+  entran como datos informativos: se ven, pero no puntúan.
+- El periodo sale de las columnas `Año` y `Mes`.
+- Los agentes se identifican por `cedula` y `nombre_completo`. **El nombre del
+  informe manda**: si esa cédula está en la malla con un nombre antiguo, se
+  unifica automáticamente para no duplicar a la misma persona.
+
+**El skill no viene como columna**: lo aporta el archivo o la hoja. El panel lo
+deduce del nombre (`…Performance_Inbound` → `INB`, `Chat` → `CHAT`,
+`Correos` → `EMAIL`…) y puedes cambiarlo antes de importar. Si el libro trae
+varias hojas —inbound, chat y correos—, se pueden importar todas de una vez y
+cada una queda con su skill.
+
+### Otro formato de indicadores
+
+Cualquier tabla con encabezados sirve: columnas mínimas `Fecha` y `Agente`, y el
+resto los indicadores que tengas configurados. Descarga la plantilla desde
 **Rendimiento → Cargar datos → Descargar plantilla CSV**.
 
 Los porcentajes se aceptan como `92,5` o como `0,925` (se detecta solo), y los

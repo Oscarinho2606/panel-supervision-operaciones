@@ -154,7 +154,7 @@ const Rend = {
       inds.slice(0, 5).forEach(ind => {
         const v = U.prom(regs.map(r => r.valores && r.valores[ind.id]));
         const vp = U.prom(prev.map(r => r.valores && r.valores[ind.id]));
-        const est = App.estadoCumplimiento(App.cumplimiento(v, ind));
+        const est = App.estadoCumplimiento(App.cumplimiento(v, ind, App.metaProm(regs, ind)));
         html += '<div class="kpi"><div class="kpi__label">' + U.esc(ind.nombre) + '</div>' +
           '<div class="kpi__value">' + U.fmt(v, ind.unidad) + '</div>' +
           '<div class="kpi__foot">' + Rend.deltaHTML(v, vp, ind.direccion, ind.unidad) +
@@ -169,17 +169,18 @@ const Rend = {
     const fechas = [...new Set(regs.map(r => r.fecha))].sort();
     if (ind) {
       const valores = fechas.map(f => U.prom(regs.filter(r => r.fecha === f).map(r => r.valores && r.valores[ind.id])));
-      document.getElementById('rTrendSub').textContent = 'Promedio diario del equipo · ' + ind.nombre;
+      document.getElementById('rTrendSub').textContent = 'Promedio del equipo por periodo · ' + ind.nombre;
       Chart.line('rTrend', {
         labels: fechas, series: [{ nombre: ind.nombre, valores: valores }],
-        unidad: ind.unidad, meta: ind.meta, area: true, formatX: (f, largo) => largo ? U.fechaLarga(f) : U.fechaCorta(f),
+        unidad: ind.unidad, meta: App.metaProm(regs, ind), area: true,
+        formatX: (f, largo) => largo ? U.fechaLarga(f) : U.fechaCorta(f),
         tituloX: 'Fecha', vacio: 'Carga registros para ver la tendencia.'
       });
     }
 
     /* --- Medidores --- */
     document.getElementById('rMeters').innerHTML = regs.length
-      ? inds.map(m => Chart.meterHTML(m.nombre, U.prom(regs.map(r => r.valores && r.valores[m.id])), m)).join('')
+      ? inds.map(m => Chart.meterHTML(m.nombre, U.prom(regs.map(r => r.valores && r.valores[m.id])), m, App.metaProm(regs, m))).join('')
       : '<div class="empty">Sin datos en el periodo</div>';
 
     /* --- Top / Bottom --- */
@@ -228,9 +229,12 @@ const Rend = {
         doc: (rs.find(r => r.doc) || {}).doc || '',
         dias: new Set(rs.map(r => r.fecha)).size,
         skill: (rs.length && rs[rs.length - 1].skill) || App.skillDeAgente(agente),
-        valores: {}, sinDatos: !rs.length
+        valores: {}, metas: {}, sinDatos: !rs.length
       };
-      App.indicadoresActivos().forEach(m => { fila.valores[m.id] = U.prom(rs.map(r => r.valores && r.valores[m.id])); });
+      App.indicadoresActivos().forEach(m => {
+        fila.valores[m.id] = U.prom(rs.map(r => r.valores && r.valores[m.id]));
+        fila.metas[m.id] = App.metaProm(rs, m);
+      });
       fila.puntaje = App.puntaje(rs);
       return fila;
     }).sort((a, b) => (b.puntaje == null ? -1 : b.puntaje) - (a.puntaje == null ? -1 : a.puntaje));
@@ -289,9 +293,10 @@ const Rend = {
             '<td>' + U.esc(r.doc || '—') + '</td>' +
             '<td class="num">' + (r.dias || '—') + '</td>' +
             inds.map(m => {
-              const c = App.cumplimiento(r.valores[m.id], m);
+              const c = App.cumplimiento(r.valores[m.id], m, r.metas[m.id]);
               const col = c == null ? 'var(--ink-muted)' : c >= 1 ? 'var(--ok)' : c >= .9 ? 'var(--warn)' : 'var(--bad)';
-              return '<td class="num" style="color:' + col + ';font-weight:600">' + U.fmt(r.valores[m.id], m.unidad) + '</td>';
+              return '<td class="num" style="color:' + col + ';font-weight:600" title="Meta ' + U.fmt(r.metas[m.id], m.unidad) + '">' +
+                U.fmt(r.valores[m.id], m.unidad) + '</td>';
             }).join('') +
             '<td class="num"><div class="bar-cell"><div class="bar-cell__track"><div class="bar-cell__fill" style="width:' +
               U.clamp((r.puntaje || 0) / maxP * 100, 0, 100).toFixed(0) + '%;background:' + est.color + '"></div></div>' +
@@ -334,7 +339,7 @@ const Rend = {
     const datos = skills.map(s => ({ s: s, v: prom(s) })).sort((a, b) => (b.v || 0) - (a.v || 0));
     Chart.bars('rSkillBar', {
       labels: datos.map(d => d.s), valores: datos.map(d => d.v), unidad: ind.unidad,
-      color: Chart.css('--s1'), horizontal: true, meta: ind.meta, nombreSerie: ind.nombre
+      color: Chart.css('--s1'), horizontal: true, meta: App.metaProm(regs, ind), nombreSerie: ind.nombre
     });
 
     // Máximo 6 skills en el mismo eje: el resto se agrupa
@@ -350,7 +355,7 @@ const Rend = {
       valores: fechas.map(f => U.prom(regs.filter(r => r.fecha === f && resto.indexOf(r.skill || 'Sin skill') > -1).map(r => r.valores && r.valores[ind.id])))
     });
     Chart.line('rSkillLine', {
-      labels: fechas, series: series, unidad: ind.unidad, meta: ind.meta,
+      labels: fechas, series: series, unidad: ind.unidad, meta: App.metaProm(regs, ind),
       formatX: (f, largo) => largo ? U.fechaLarga(f) : U.fechaCorta(f), tituloX: 'Fecha'
     });
 
@@ -491,6 +496,10 @@ const Rend = {
   async procesar(file) {
     try {
       const libro = await Sheets.leer(file);
+
+      // Los informes de operaciones traen la meta junto al resultado: se leen aparte
+      if (Informe.abrir(libro)) return;
+
       const campos = [
         { key: 'fecha', label: 'Fecha', req: true, alias: ['dia', 'día', 'date', 'fecha gestion', 'fecha de gestion'] },
         { key: 'agente', label: 'Agente', req: true, alias: ['nombre agente', 'nombre_agente', 'asesor', 'nombre', 'nombre completo', 'nombre_completo', 'empleado', 'usuario', 'agent', 'colaborador'] },

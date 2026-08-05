@@ -605,12 +605,29 @@ const App = {
   indicador(id) { return State.indicadores.find(m => m.id === id); },
 
   /** Cumplimiento 0..1.5 de un valor contra la meta del indicador. */
-  cumplimiento(valor, ind) {
-    if (valor == null || !isFinite(valor) || !ind || !ind.meta) return null;
+  cumplimiento(valor, ind, meta) {
+    const m = meta == null ? (ind && ind.meta) : meta;
+    if (valor == null || !isFinite(valor) || !ind || m == null || !isFinite(m)) return null;
+    // Meta cero: es un "no debe haber ninguno" (errores, ausentismo). Se cumple o no.
+    if (m === 0) {
+      if (ind.direccion === 'down') return valor <= 0 ? 1 : 0;
+      return valor > 0 ? 1.5 : 0;
+    }
     const r = ind.direccion === 'down'
-      ? (valor <= 0 ? 1.5 : ind.meta / valor)
-      : valor / ind.meta;
+      ? (valor <= 0 ? 1.5 : m / valor)
+      : valor / m;
     return U.clamp(r, 0, 1.5);
+  },
+
+  /** Meta de un indicador para un registro concreto: manda la que trae el informe. */
+  metaDe(reg, ind) {
+    return (reg && reg.metas && reg.metas[ind.id] != null) ? reg.metas[ind.id] : ind.meta;
+  },
+
+  /** Meta representativa de un conjunto de registros (promedia las individuales). */
+  metaProm(registros, ind) {
+    const v = (registros || []).map(r => App.metaDe(r, ind)).filter(x => x != null && isFinite(x));
+    return v.length ? U.prom(v) : ind.meta;
   },
 
   estadoCumplimiento(c) {
@@ -625,12 +642,13 @@ const App = {
     const inds = App.indicadoresActivos();
     let suma = 0, pesos = 0;
     inds.forEach(ind => {
-      const vals = registros.map(r => r.valores && r.valores[ind.id]).filter(v => v != null && isFinite(v));
-      if (!vals.length) return;
-      const c = App.cumplimiento(U.prom(vals), ind);
-      if (c == null) return;
+      const conDato = registros.filter(r => r.valores && r.valores[ind.id] != null && isFinite(r.valores[ind.id]));
+      if (!conDato.length) return;
+      // Cada registro se compara con su propia meta y luego se promedia
+      const cumpl = conDato.map(r => App.cumplimiento(r.valores[ind.id], ind, App.metaDe(r, ind))).filter(c => c != null);
+      if (!cumpl.length) return;
       const p = Number(ind.peso) || 1;
-      suma += c * p; pesos += p;
+      suma += U.prom(cumpl) * p; pesos += p;
     });
     return pesos ? (suma / pesos) * 100 : null;
   }

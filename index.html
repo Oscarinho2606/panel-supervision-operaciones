@@ -148,7 +148,7 @@
           <p class="card__sub" id="rRankingSub">Todos los agentes de la malla, agrupados en su skill</p>
         </div>
         <div class="card__tools">
-          <label class="checkline"><input type="checkbox" id="rSinDatos" checked onchange="Rend.renderRanking()"> Incluir agentes sin datos</label>
+          <label class="checkline"><input type="checkbox" id="rSinDatos" checked onchange="Rend.renderRanking()"> Incluir agentes de la malla sin indicadores</label>
           <button type="button" class="btn btn--ghost btn--sm" onclick="Rend.exportRanking()">Exportar CSV</button>
         </div>
       </div>
@@ -240,7 +240,7 @@
              ondrop="Rend.onDrop(event)">
           <div class="dropzone__icon">⬆</div>
           <p><strong>Arrastra tu archivo aquí</strong> o haz clic para buscarlo</p>
-          <span class="hint">La primera fila debe contener los encabezados</span>
+          <span class="hint">Reconoce el informe de operaciones con sus metas, o cualquier tabla con encabezados</span>
           <input type="file" id="fileRend" accept=".xlsx,.xlsm,.csv,.txt" hidden onchange="Rend.onFile(event)">
         </div>
         <div class="stack">
@@ -640,6 +640,7 @@
 
 <script src="assets/js/core.js"></script>
 <script src="assets/js/sheets.js"></script>
+<script src="assets/js/informe.js"></script>
 <script src="assets/js/charts.js"></script>
 <script src="assets/js/rendimiento.js"></script>
 <script src="assets/js/agentes.js"></script>

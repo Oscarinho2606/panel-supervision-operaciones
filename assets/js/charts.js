@@ -453,8 +453,9 @@ const Chart = {
 
   /* ================================ MEDIDOR ============================== */
   /** Devuelve el HTML de un medidor de cumplimiento contra la meta. */
-  meterHTML(nombre, valor, ind) {
-    const c = App.cumplimiento(valor, ind);
+  meterHTML(nombre, valor, ind, meta) {
+    const m = meta == null ? ind.meta : meta;
+    const c = App.cumplimiento(valor, ind, m);
     const est = App.estadoCumplimiento(c);
     const pct = c == null ? 0 : U.clamp(c * 100, 0, 100);
     const relleno = c == null ? 'var(--series-muted)' : c >= 1 ? 'var(--ok)' : c >= 0.9 ? 'var(--warn)' : 'var(--bad)';
@@ -463,7 +464,7 @@ const Chart = {
         '<span class="meter__val">' + U.fmt(valor, ind.unidad) + ' <span class="badge ' + est.clase + '">' + est.etiqueta + '</span></span></div>' +
       '<div class="meter__track"><div class="meter__fill" style="width:' + pct.toFixed(1) + '%;background:' + relleno + '"></div>' +
         '<div class="meter__goal" style="left:' + (c == null ? 100 : U.clamp(100 / Math.max(c, 1), 0, 100)).toFixed(1) + '%"></div></div>' +
-      '<div class="meter__foot"><span>Meta: ' + U.fmt(ind.meta, ind.unidad) + (ind.direccion === 'down' ? ' o menos' : ' o más') + '</span>' +
+      '<div class="meter__foot"><span>Meta: ' + U.fmt(m, ind.unidad) + (ind.direccion === 'down' ? ' o menos' : ' o más') + '</span>' +
         '<span>' + (c == null ? 'Sin dato' : U.dec(c * 100, 0) + ' % de cumplimiento') + '</span></div>' +
       '</div>';
   }

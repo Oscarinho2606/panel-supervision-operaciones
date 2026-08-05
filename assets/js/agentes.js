@@ -182,8 +182,9 @@ const Agentes = {
     const conDatos = nombres.map(n => {
       const regs = Agentes.registrosDe(n);
       const prom = U.prom(regs.map(r => r.valores && r.valores[ind.id]));
+      const meta = App.metaProm(regs, ind);          // cada agente puede tener su propia meta
       return {
-        nombre: n, regs: regs, prom: prom, cump: App.cumplimiento(prom, ind),
+        nombre: n, regs: regs, prom: prom, meta: meta, cump: App.cumplimiento(prom, ind, meta),
         skill: skillSel || Agentes.skillPrincipal(n)
       };
     });
@@ -212,11 +213,12 @@ const Agentes = {
 
     host.innerHTML = grupos.map(g => {
       const prom = U.prom(g.agentes.map(a => a.prom));
+      const metaG = U.prom(g.agentes.map(a => a.meta));
       const cabecera = (grupos.length > 1 || !skillSel)
         ? '<div class="group-head"><span class="group-head__dot"></span>' +
           '<span class="group-head__name">' + U.esc(g.skill) + '</span>' +
           '<span class="group-head__meta">' + g.agentes.length + ' agente' + (g.agentes.length === 1 ? '' : 's') +
-          ' · promedio ' + U.fmt(prom, ind.unidad) + ' · meta ' + U.fmt(ind.meta, ind.unidad) + '</span></div>'
+          ' · promedio ' + U.fmt(prom, ind.unidad) + ' · meta ' + U.fmt(metaG, ind.unidad) + '</span></div>'
         : '';
       return cabecera + g.agentes.map(a => {
         const i = orden2.push(a) - 1;
@@ -251,7 +253,7 @@ const Agentes = {
       a.regs.forEach(r => { if (r.valores && r.valores[ind.id] != null) mapa[r.fecha] = r.valores[ind.id]; });
       const valores = fechas.map(f => mapa[f] == null ? null : mapa[f]);
       const cfg = {
-        labels: fechas, unidad: ind.unidad, meta: ind.meta, compacto: true, alto: 150,
+        labels: fechas, unidad: ind.unidad, meta: a.meta, compacto: true, alto: 150,
         formatX: (f, largo) => largo ? U.fechaLarga(f) : U.fechaCorta(f), tituloX: 'Fecha',
         vacio: 'Este agente no tiene datos en el periodo'
       };
@@ -309,14 +311,16 @@ const Agentes = {
           '<div class="kpi__foot"><span>Entre ' + new Set(equipo.map(r => r.agente)).size + ' agentes</span></div></div>' +
       '</div>' +
       '<div class="ficha-grid">' +
-        inds.map((m, i) =>
-          '<div class="card" style="margin:0"><div class="card__head"><div>' +
-          '<h3 class="card__title">' + U.esc(m.nombre) + '</h3>' +
-          '<p class="card__sub">Meta ' + U.fmt(m.meta, m.unidad) + (m.direccion === 'down' ? ' o menos' : ' o más') + '</p></div>' +
-          '<span class="badge ' + App.estadoCumplimiento(App.cumplimiento(U.prom(regs.map(r => r.valores && r.valores[m.id])), m)).clase + '">' +
-          U.fmt(U.prom(regs.map(r => r.valores && r.valores[m.id])), m.unidad) + '</span></div>' +
-          '<div class="chart-host" id="afc-' + i + '" style="min-height:170px"></div></div>'
-        ).join('') +
+        inds.map((m, i) => {
+          const val = U.prom(regs.map(r => r.valores && r.valores[m.id]));
+          const meta = App.metaProm(regs, m);
+          return '<div class="card" style="margin:0"><div class="card__head"><div>' +
+            '<h3 class="card__title">' + U.esc(m.nombre) + '</h3>' +
+            '<p class="card__sub">Meta ' + U.fmt(meta, m.unidad) + (m.direccion === 'down' ? ' o menos' : ' o más') + '</p></div>' +
+            '<span class="badge ' + App.estadoCumplimiento(App.cumplimiento(val, m, meta)).clase + '">' +
+            U.fmt(val, m.unidad) + '</span></div>' +
+            '<div class="chart-host" id="afc-' + i + '" style="min-height:170px"></div></div>';
+        }).join('') +
       '</div>' +
       '<div class="card" style="margin-top:14px"><div class="card__head"><div><h3 class="card__title">Detalle diario</h3>' +
       '<p class="card__sub">Registros de ' + U.esc(nombre) + ' en el periodo</p></div></div>' +
@@ -324,9 +328,10 @@ const Agentes = {
       inds.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') + '<th class="no-sort">Observación</th></tr></thead><tbody>' +
       regs.slice().reverse().map(r => '<tr><td>' + U.fechaCorta(r.fecha) + '</td><td>' + U.esc(r.skill || '—') + '</td>' +
         inds.map(m => {
-          const c = App.cumplimiento(r.valores && r.valores[m.id], m);
+          const c = App.cumplimiento(r.valores && r.valores[m.id], m, App.metaDe(r, m));
           const col = c == null ? '' : c >= 1 ? 'var(--ok)' : c >= .9 ? 'var(--warn)' : 'var(--bad)';
-          return '<td class="num" style="color:' + col + '">' + U.fmt(r.valores && r.valores[m.id], m.unidad) + '</td>';
+          return '<td class="num" style="color:' + col + '" title="Meta ' + U.fmt(App.metaDe(r, m), m.unidad) + '">' +
+            U.fmt(r.valores && r.valores[m.id], m.unidad) + '</td>';
         }).join('') + '<td>' + U.esc(r.nota || '') + '</td></tr>').join('') +
       '</tbody></table></div></div>';
 
@@ -334,7 +339,7 @@ const Agentes = {
       Chart.line('afc-' + i, {
         labels: fechas,
         series: [{ nombre: m.nombre, valores: regs.map(r => (r.valores && r.valores[m.id]) == null ? null : r.valores[m.id]), color: Chart.css('--s1') }],
-        unidad: m.unidad, meta: m.meta, area: true, alto: 170, compacto: true,
+        unidad: m.unidad, meta: App.metaProm(regs, m), area: true, alto: 170, compacto: true,
         formatX: (f, largo) => largo ? U.fechaLarga(f) : U.fechaCorta(f), tituloX: 'Fecha'
       });
     });
@@ -372,8 +377,9 @@ const Agentes = {
       return { nombre: n, color: Chart.color(i), valores: fechas.map(f => mapa[f] == null ? null : mapa[f]) };
     });
 
+    const regsTodos = nombres.reduce((a, n) => a.concat(Agentes.registrosDe(n)), []);
     Chart.line('aCompare', {
-      labels: fechas, series: series, unidad: ind.unidad, meta: ind.meta, alto: 320,
+      labels: fechas, series: series, unidad: ind.unidad, meta: App.metaProm(regsTodos, ind), alto: 320,
       formatX: (f, largo) => largo ? U.fechaLarga(f) : U.fechaCorta(f), tituloX: 'Fecha',
       nota: todos.length > 6
         ? 'Se comparan los primeros 6 de ' + todos.length + ' agentes seleccionados. Los demás siguen visibles en la pestaña de gráficos individuales.'
@@ -390,9 +396,11 @@ const Agentes = {
         return '<tr><td class="name">' + U.esc(n) + '</td><td class="num">' + regs.length + '</td>' +
           inds.map(m => {
             const v = U.prom(regs.map(r => r.valores && r.valores[m.id]));
-            const c = App.cumplimiento(v, m);
+            const meta = App.metaProm(regs, m);
+            const c = App.cumplimiento(v, m, meta);
             const col = c == null ? '' : c >= 1 ? 'var(--ok)' : c >= .9 ? 'var(--warn)' : 'var(--bad)';
-            return '<td class="num" style="color:' + col + ';font-weight:600">' + U.fmt(v, m.unidad) + '</td>';
+            return '<td class="num" style="color:' + col + ';font-weight:600" title="Meta ' + U.fmt(meta, m.unidad) + '">' +
+              U.fmt(v, m.unidad) + '</td>';
           }).join('') +
           '<td class="num"><strong>' + (p == null ? '—' : U.dec(p, 1) + '%') + '</strong></td></tr>';
       }).join('') + '</tbody></table>';
