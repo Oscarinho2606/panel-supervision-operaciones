@@ -224,8 +224,9 @@ const Informe = {
             '<input type="text" id="infSkillOtro" placeholder="Escribe el skill" style="display:none;margin-top:6px">' +
             '<span class="hint">El archivo no trae columna de servicio; se asigna a todo el informe.</span>' +
           '</div>' +
-          '<div class="field"><label>Periodo</label><input type="date" id="infFecha" value="' + a.periodo.fecha + '">' +
-            '<span class="hint">Fecha con la que se guardan estos resultados.</span></div>' +
+          '<div class="field"><label>Fecha del corte</label><input type="date" id="infFecha" value="' + U.hoy() + '">' +
+            '<span class="hint">Se guarda con la fecha de hoy. El archivo corresponde a ' + U.esc(a.periodo.etiqueta) +
+            '; si prefieres esa, ponla aquí.</span></div>' +
         '</div>' +
 
         '<p class="hint" style="margin:14px 0 6px"><strong>Indicadores encontrados.</strong> ' +
@@ -294,7 +295,7 @@ const Informe = {
 
     const selSkill = document.getElementById('infSkill').value;
     const skillManual = selSkill === '__otro' ? document.getElementById('infSkillOtro').value.trim() : selSkill;
-    const fecha = document.getElementById('infFecha').value || a.periodo.fecha;
+    const fecha = document.getElementById('infFecha').value || U.hoy();
     const reemplazar = document.getElementById('infReemplazar').checked;
 
     const hojas = todasLasHojas ? ctx.analisis : [a];
@@ -310,8 +311,9 @@ const Informe = {
           else { ind.incluir = true; ind.peso = 1; }
         });
       }
+      // Todas las hojas del mismo libro comparten el corte
       const skill = todasLasHojas ? (an.skill || skillManual) : skillManual;
-      const res = Informe.importarHoja(an, skill, an === a ? fecha : an.periodo.fecha, reemplazar);
+      const res = Informe.importarHoja(an, skill, fecha, reemplazar);
       totalAgentes += res.agentes;
       totalInd = Math.max(totalInd, res.indicadores);
       totalRenombrados += res.renombrados;

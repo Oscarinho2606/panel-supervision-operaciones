@@ -95,6 +95,46 @@ const Rend = {
     });
   },
 
+  /**
+   * Si hay resultados cargados que el filtro actual está dejando fuera, lo avisa.
+   * Pasa al cargar un informe de un mes y una malla de otro: sin este aviso
+   * parece que la carga no funcionó.
+   */
+  avisoFiltro() {
+    const total = State.registros.length;
+    if (!total) return '';
+    const visibles = Rend.filtrados().length;
+    if (visibles) return '';
+
+    const f = State.ui.filtros || {};
+    const r = App.rangoDatos(State.registros);
+    const periodos = [...new Set(State.registros.map(x => x.fecha))].sort();
+    const skills = [...new Set(State.registros.map(x => x.skill).filter(Boolean))];
+
+    let causa = '';
+    if (f.skill && skills.indexOf(f.skill) < 0) {
+      causa = 'No hay resultados cargados del skill <strong>' + U.esc(f.skill) + '</strong>. Los que tienes son de: ' +
+        U.esc(skills.join(', ') || 'ningún skill') + '.';
+    } else {
+      causa = 'Los ' + total + ' resultados cargados son ' +
+        (periodos.length === 1 ? 'del <strong>' + U.fechaLarga(periodos[0]) + '</strong>'
+                               : 'de <strong>' + U.fechaCorta(r.min) + '</strong> a <strong>' + U.fechaCorta(r.max) + '</strong>') +
+        ', fuera del rango de fechas que tienes filtrado.';
+    }
+    return '<div class="aviso"><div><strong>No se está mostrando la información cargada.</strong>' + causa + '</div>' +
+      '<button class="btn btn--primary btn--sm" type="button" onclick="Rend.verTodo()">Ver todo</button></div>';
+  },
+
+  /** Abre el filtro por completo: todo el rango de fechas y todos los skills. */
+  verTodo() {
+    const r = App.rangoDatos(State.registros);
+    document.getElementById('fDesde').value = r.min;
+    document.getElementById('fHasta').value = r.max;
+    document.getElementById('fSkill').value = '';
+    document.getElementById('fBuscar').value = '';
+    Rend.onFilter();
+  },
+
   /** Agentes que deben aparecer en el listado según los filtros activos. */
   agentesFiltrados() {
     const f = State.ui.filtros || {};
@@ -142,8 +182,12 @@ const Rend = {
     let html = '';
     if (!regs.length) {
       html = '<div class="kpi" style="grid-column:1/-1"><div class="kpi__label">Sin información</div>' +
-        '<div class="kpi__value" style="font-size:18px">Aún no hay registros en este periodo</div>' +
-        '<div class="kpi__foot">Ve a <strong>Cargar datos</strong> para subir tu Excel o registrar manualmente. También puedes probar con datos de ejemplo desde Ajustes.</div></div>';
+        '<div class="kpi__value" style="font-size:18px">' +
+          (State.registros.length ? 'El filtro está dejando fuera lo que cargaste' : 'Aún no hay resultados cargados') + '</div>' +
+        '<div class="kpi__foot">' + (State.registros.length
+          ? '<button class="btn btn--primary btn--sm" type="button" onclick="Rend.verTodo()">Ver todo</button>'
+          : 'Ve a <strong>Cargar datos</strong> para subir tu informe. También puedes probar con datos de ejemplo desde Ajustes.') +
+        '</div></div>';
     } else {
       const enPlantilla = Rend.agentesFiltrados().length;
       html += '<div class="kpi kpi--hero"><div class="kpi__label">Puntaje global del equipo</div>' +
@@ -269,13 +313,14 @@ const Rend = {
 
     const conDatos = rank.filter(r => !r.sinDatos).length;
     document.getElementById('rRankingSub').textContent =
-      rank.length + ' agentes en ' + grupos.length + ' skills · ' + conDatos + ' con indicadores cargados' +
+      rank.length + ' agentes en ' + grupos.length + ' skill' + (grupos.length === 1 ? '' : 's') + ' · ' +
+      conDatos + ' con indicadores cargados' +
       (rank.length - conDatos ? ' · ' + (rank.length - conDatos) + ' sin datos aún' : '');
 
     const maxP = Math.max(...rank.map(r => r.puntaje || 0), 100);
     const nCols = 5 + inds.length + 2;
 
-    host.innerHTML = '<table class="data"><thead><tr>' +
+    host.innerHTML = Rend.avisoFiltro() + '<table class="data"><thead><tr>' +
       '<th class="no-sort">#</th><th class="no-sort">Agente</th><th class="no-sort">Documento</th><th class="num no-sort">Días</th>' +
       inds.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') +
       '<th class="num no-sort">Puntaje global</th><th class="no-sort">Estado</th></tr></thead><tbody>' +
@@ -680,6 +725,24 @@ const Rend = {
     State.indicadores = State.indicadores.filter(x => x.id !== id);
     await App.guardarYa();
     Rend.init(); Agentes.init(); Rend.render();
+  },
+
+  /** Quita los indicadores que no tienen ningún valor cargado (los del ejemplo, por ejemplo). */
+  async limpiarSinDatos() {
+    const vacios = State.indicadores.filter(m =>
+      !State.registros.some(r => r.valores && r.valores[m.id] != null));
+    if (!vacios.length) return App.toast('Nada que quitar', 'Todos tus indicadores tienen datos cargados.', 'ok');
+
+    const ok = await App.confirmar('Quitar indicadores sin datos',
+      'Se eliminan ' + vacios.length + ' indicadores que no tienen ningún valor cargado: ' +
+      vacios.map(m => m.nombre).join(', ') + '.');
+    if (!ok) return;
+
+    const ids = new Set(vacios.map(m => m.id));
+    State.indicadores = State.indicadores.filter(m => !ids.has(m.id));
+    await App.guardarYa();
+    Rend.init(); Agentes.init(); Rend.render();
+    App.toast('Indicadores eliminados', vacios.length + ' columnas menos', 'ok');
   },
 
   async restaurarIndicadores() {
