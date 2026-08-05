@@ -109,12 +109,12 @@ const Agentes = {
     let nombres = (State.ui.agentesSel || []).slice();
 
     if (!nombres.length) {
-      host.innerHTML = '<div class="card"><div class="empty"><strong>Ningún agente agregado</strong>' +
+      host.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><strong>Ningún agente agregado</strong>' +
         'Selecciona arriba los agentes que quieras seguir. Cada uno aparecerá con su propio gráfico individual.</div></div>';
       return;
     }
     if (!ind) {
-      host.innerHTML = '<div class="card"><div class="empty"><strong>No hay indicadores configurados</strong>Ve a Rendimiento → Indicadores y metas.</div></div>';
+      host.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><strong>No hay indicadores configurados</strong>Ve a Rendimiento → Indicadores y metas.</div></div>';
       return;
     }
 

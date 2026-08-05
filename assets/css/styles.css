@@ -242,6 +242,7 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .filterbar .field { flex: 0 1 165px; }
 .filterbar .field--presets { flex: 1 1 auto; }
+.filterbar .field--grow { flex: 1 1 300px; }
 .filterbar--compact { padding: 10px 14px; }
 
 .chipset { display: flex; gap: 6px; flex-wrap: wrap; }

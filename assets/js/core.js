@@ -347,12 +347,20 @@ const App = {
     Rend.init(); Agentes.init(); Turnos.init(); Conocimientos.init();
     App.pintarAjustes();
     App.listo = true;
-    App.go(State.ui.vista || 'rendimiento', true);
+    App.go(App.vistaDelEnlace() || State.ui.vista || 'rendimiento', true);
+    Demo.autoSiVacio();
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') App.cerrarModal();
     });
     window.addEventListener('resize', U.debounce(() => App.repintar(), 220));
+  },
+
+  /** Permite enlazar una sección directa: index.html#turnos o #demo,agentes */
+  vistaDelEnlace() {
+    const partes = String(location.hash || '').replace('#', '').split(/[,&]/);
+    const vistas = ['rendimiento', 'agentes', 'turnos', 'conocimientos', 'ajustes'];
+    return partes.map(p => p.trim()).find(p => vistas.indexOf(p) > -1) || null;
   },
 
   /* --- Navegación --- */

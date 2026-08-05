@@ -27,11 +27,13 @@ const Demo = {
     return x - Math.floor(x);
   },
 
-  async cargar() {
-    const ok = await App.confirmar('Cargar datos de ejemplo',
-      'Se agregan agentes, 30 días de indicadores, una malla de turnos de dos semanas y una base de conocimiento de muestra. ' +
-      'Tu información actual se reemplaza.');
-    if (!ok) return;
+  async cargar(sinPreguntar) {
+    if (!sinPreguntar) {
+      const ok = await App.confirmar('Cargar datos de ejemplo',
+        'Se agregan agentes, 30 días de indicadores, una malla de turnos de dos semanas y una base de conocimiento de muestra. ' +
+        'Tu información actual se reemplaza.');
+      if (!ok) return;
+    }
 
     State.indicadores = JSON.parse(JSON.stringify(INDICADORES_BASE));
     State.registros = Demo.registros();
@@ -49,8 +51,18 @@ const Demo = {
     document.getElementById('aHasta').value = State.ui.filtros.hasta;
     document.getElementById('tFecha').value = U.hoy();
     Rend.init(); Agentes.init(); Turnos.init(); Conocimientos.init();
-    App.go('rendimiento'); App.pintarAjustes();
+    App.go(App.vistaDelEnlace() || 'rendimiento'); App.pintarAjustes();
     App.toast('Datos de ejemplo cargados', 'Explora las pestañas para ver cómo funciona el panel.', 'ok');
+  },
+
+  /** Con #demo en la dirección se carga el ejemplo solo si el panel está vacío,
+      para poder enseñar cómo funciona sin tocar información real. */
+  autoSiVacio() {
+    const partes = String(location.hash || '').replace('#', '').split(/[,&]/).map(s => s.trim());
+    if (partes.indexOf('demo') < 0) return false;
+    if (State.registros.length || State.turnos.length || State.conocimientos.length) return false;
+    Demo.cargar(true);
+    return true;
   },
 
   registros() {
@@ -116,7 +128,7 @@ const Demo = {
     const req = {};
     const skills = ['Ventas', 'Retención', 'Soporte', 'Facturación'];
     const curva = { 6: .4, 7: .7, 8: 1, 9: 1, 10: 1.1, 11: 1.1, 12: .9, 13: .9, 14: 1, 15: 1, 16: 1, 17: .9, 18: .7, 19: .6, 20: .5, 21: .4 };
-    const base = { 'Ventas': 4, 'Retención': 3, 'Soporte': 3, 'Facturación': 2 };
+    const base = { 'Ventas': 2, 'Retención': 2, 'Soporte': 2, 'Facturación': 1 };
     skills.forEach(s => {
       for (let h = 0; h < 24; h++) {
         const f = curva[h];

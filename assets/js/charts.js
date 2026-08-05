@@ -165,19 +165,24 @@ const Chart = {
     });
     svg.appendChild(Chart.el('line', { x1: m.l, x2: W - m.r, y1: m.t + ph, y2: m.t + ph, class: 'axis-line' }));
 
-    // Eje X con etiquetas espaciadas
-    const maxEtq = Math.max(2, Math.floor(pw / (compacto ? 52 : 76)));
+    // Eje X con etiquetas espaciadas; la última solo se dibuja si no pisa a la anterior
+    const anchoEtq = compacto ? 52 : 76;
+    const maxEtq = Math.max(2, Math.floor(pw / anchoEtq));
     const salto = Math.max(1, Math.ceil(n / maxEtq));
+    let ultimaX = -Infinity;
     cfg.labels.forEach((l, i) => {
-      if (i % salto !== 0 && i !== n - 1) return;
+      const esUltima = i === n - 1;
+      if (i % salto !== 0 && !esUltima) return;
+      if (X(i) - ultimaX < anchoEtq * 0.72) return;
+      ultimaX = X(i);
       svg.appendChild(Chart.el('text', { x: X(i), y: H - m.b + 15, class: 'axis-label', 'text-anchor': 'middle' },
         cfg.formatX ? cfg.formatX(l) : String(l)));
     });
 
-    // Línea de meta
+    // Línea de meta — la etiqueta va a la izquierda para no chocar con el valor final
     if (cfg.meta != null && isFinite(cfg.meta)) {
       svg.appendChild(Chart.el('line', { x1: m.l, x2: W - m.r, y1: Y(cfg.meta), y2: Y(cfg.meta), class: 'goal-line' }));
-      if (!compacto) svg.appendChild(Chart.el('text', { x: W - m.r, y: Y(cfg.meta) - 5, class: 'goal-tag', 'text-anchor': 'end' },
+      if (!compacto) svg.appendChild(Chart.el('text', { x: m.l + 4, y: Y(cfg.meta) - 5, class: 'goal-tag', 'text-anchor': 'start' },
         (cfg.metaLabel || 'Meta') + ' ' + U.fmt(cfg.meta, cfg.unidad)));
     }
 
@@ -203,8 +208,9 @@ const Chart = {
         svg.appendChild(Chart.el('circle', { cx: p[0], cy: p[1], r: 4, fill: s.color, stroke: surf, 'stroke-width': 2 }));
       });
 
-      // Etiqueta directa en el extremo (solo si hay espacio)
-      if (!compacto && series.length <= 4) {
+      // Etiqueta directa en el extremo: solo con pocas series y si aporta algo
+      // (con muchas líneas terminando en cero se amontonan y no se leen).
+      if (!compacto && series.length <= 3 && pts[pts.length - 1][3]) {
         const ult = pts[pts.length - 1];
         svg.appendChild(Chart.el('text', { x: ult[0], y: ult[1] - 11, class: 'value-label', 'text-anchor': ult[0] > W - m.r - 30 ? 'end' : 'middle' },
           U.fmt(ult[3], cfg.unidad)));
