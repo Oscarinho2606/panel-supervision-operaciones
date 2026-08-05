@@ -42,6 +42,9 @@ La sección para el seguimiento individual.
 - **Gráficos individuales**: agrega los agentes que quieras y cada uno recibe su
   propia tarjeta con su gráfico, su promedio, su mejor día y su puntaje.
   Puedes ordenar las tarjetas por nombre, por mejor o por menor cumplimiento.
+- **Filtro por skill**: elige un segmento y solo verás a sus agentes. Con «Todos»,
+  las tarjetas se agrupan bajo el encabezado de cada skill, que muestra cuántos
+  agentes tiene y su promedio contra la meta.
 - **Ficha completa**: un gráfico por cada indicador del agente, más su posición
   en el ranking y su detalle diario.
 - **Comparar agentes**: hasta 6 en un mismo eje para que las líneas sigan siendo distinguibles.
@@ -61,12 +64,20 @@ Tres formas de contar la cobertura:
 `conectados reales` (descuenta todas las pausas) · `descontar solo almuerzo` · `turno completo`.
 
 ### 📚 Conocimientos
-La documentación operativa.
+La documentación operativa, organizada por skill.
 
-- **Títulos** que agrupan procesos (por ejemplo, «Procesos de facturación»).
+- **Títulos** que agrupan procesos, cada uno asignado al **skill** al que pertenece.
+  Los que se dejan en «General» aparecen con cualquier skill.
 - Dentro de cada título, los **procesos** con sus notas paso a paso y sus etiquetas.
 - A cada proceso se le adjuntan **PDF**, que se ven dentro del panel o se descargan.
-- Buscador que revisa títulos, procesos, notas, etiquetas y nombres de archivo.
+- **Filtro por skill**: muestra solo la documentación del segmento elegido. Con
+  «Todos», la biblioteca se agrupa por skill.
+- Buscador que revisa títulos, skills, procesos, notas, etiquetas y nombres de archivo.
+
+> **De dónde salen los skills:** son los segmentos de tu malla (la columna `Servicio`:
+> INB, OUT, EMAIL, CHAT, PQR, RRSS, BACKOFFICE, MONITOREO TRANSACCIONAL…). El panel
+> determina el skill de cada agente por la programación que tiene en el horario; si
+> alguien no aparece en la malla, usa el servicio de su reporte de indicadores.
 
 ---
 

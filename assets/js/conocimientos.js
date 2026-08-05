@@ -9,21 +9,52 @@
 const Conocimientos = {
   urlActual: null,
 
+  SIN_SKILL: 'General (todos los skills)',
+
   init() { Conocimientos.pintarFiltro(); },
 
   pintarFiltro() {
     const sel = document.getElementById('cTitulo');
-    if (!sel) return;
-    const previo = sel.value;
-    sel.innerHTML = '<option value="">Todos</option>' +
-      State.conocimientos.map(t => '<option value="' + t.id + '">' + U.esc(t.titulo) + '</option>').join('');
-    sel.value = previo;
+    if (sel) {
+      const previo = sel.value;
+      sel.innerHTML = '<option value="">Todos</option>' +
+        State.conocimientos.map(t => '<option value="' + t.id + '">' + U.esc(t.titulo) + '</option>').join('');
+      sel.value = previo;
+    }
+    const sk = document.getElementById('cSkill');
+    if (sk) {
+      const previo = sk.value;
+      const lista = Conocimientos.skillsDisponibles();
+      sk.innerHTML = '<option value="">Todos (agrupados por skill)</option>' +
+        lista.map(s => '<option value="' + U.esc(s) + '">' + U.esc(s) + '</option>').join('');
+      if (previo && lista.indexOf(previo) > -1) sk.value = previo;
+    }
+  },
+
+  /** Skills de la operación más los que ya se hayan usado en la biblioteca. */
+  skillsDisponibles() {
+    const s = new Set(App.skills());
+    State.conocimientos.forEach(t => { if (t.skill) s.add(t.skill); });
+    return [...s].sort((a, b) => a.localeCompare(b, 'es'));
+  },
+
+  skillDe(t) { return t.skill || Conocimientos.SIN_SKILL; },
+
+  skillFiltro() {
+    const sel = document.getElementById('cSkill');
+    return sel ? sel.value : '';
+  },
+
+  /** Un título sin skill es material general: aparece con cualquier filtro. */
+  visiblePorSkill(t) {
+    const sk = Conocimientos.skillFiltro();
+    return !sk || !t.skill || t.skill === sk;
   },
 
   /* ------------------------------- Búsqueda ------------------------------ */
   coincide(titulo, proceso, texto) {
     if (!texto) return true;
-    const campos = [titulo.titulo, titulo.descripcion, proceso.nombre, proceso.notas,
+    const campos = [titulo.titulo, titulo.descripcion, titulo.skill, proceso.nombre, proceso.notas,
       (proceso.tags || []).join(' '), (proceso.archivos || []).map(a => a.nombre).join(' ')].join(' ');
     return U.norm(campos).indexOf(texto) > -1;
   },
@@ -41,42 +72,86 @@ const Conocimientos = {
     const host = document.getElementById('cLibrary');
     const texto = U.norm(document.getElementById('cBuscar').value || '');
     const filtroTitulo = document.getElementById('cTitulo').value;
+    const skillSel = Conocimientos.skillFiltro();
 
     if (!State.conocimientos.length) {
       host.innerHTML = '<div class="card"><div class="empty">' +
         '<strong>Todavía no hay conocimiento cargado</strong>' +
-        'Crea un título (por ejemplo «Procesos de facturación»), agrégale los procesos que necesites, ' +
-        'escribe las notas de cómo se realiza cada uno y adjunta los PDF de soporte.</div>' +
+        'Crea un título (por ejemplo «Procesos de facturación»), asígnale el skill al que pertenece, ' +
+        'agrégale los procesos que necesites, escribe las notas de cómo se realiza cada uno y adjunta los PDF de soporte.</div>' +
         '<div class="stack" style="justify-content:center"><button class="btn btn--primary" type="button" onclick="Conocimientos.nuevoTitulo()">+ Crear el primer título</button>' +
         '<button class="btn btn--ghost" type="button" onclick="Demo.cargarConocimiento()">Cargar ejemplo</button></div></div>';
       return;
     }
 
-    const titulos = State.conocimientos.filter(t => !filtroTitulo || t.id === filtroTitulo);
-    let visibles = 0;
-    const html = titulos.map(t => {
-      const procesos = (t.procesos || []).filter(p => Conocimientos.coincide(t, p, texto));
-      if (texto && !procesos.length && U.norm(t.titulo + ' ' + (t.descripcion || '')).indexOf(texto) < 0) return '';
-      visibles++;
-      const abierto = texto ? true : t.abierto;
-      const nArch = (t.procesos || []).reduce((a, p) => a + (p.archivos || []).length, 0);
-      return '<div class="kb-title' + (abierto ? ' is-open' : '') + '">' +
-        '<div class="kb-title__head" onclick="Conocimientos.toggleTitulo(\'' + t.id + '\')">' +
-          '<span class="kb-title__caret">▶</span>' +
-          '<div class="kb-title__name">' + U.esc(t.titulo) +
-            (t.descripcion ? '<div class="kb-title__desc">' + U.esc(t.descripcion) + '</div>' : '') + '</div>' +
-          '<span class="kb-proc__count">' + (t.procesos || []).length + ' procesos · ' + nArch + ' PDF</span>' +
-          '<button class="icon-btn" type="button" title="Agregar proceso" onclick="event.stopPropagation();Conocimientos.nuevoProceso(\'' + t.id + '\')">+</button>' +
-        '</div>' +
-        '<div class="kb-title__body">' +
-          (procesos.length ? procesos.map(p => Conocimientos.procesoHTML(t, p, texto)).join('')
-            : '<div class="empty" style="padding:18px">Este título aún no tiene procesos. ' +
-              '<button class="link-btn" type="button" onclick="Conocimientos.nuevoProceso(\'' + t.id + '\')">Agregar el primero</button></div>') +
-        '</div></div>';
-    }).join('');
+    const titulos = State.conocimientos.filter(t =>
+      (!filtroTitulo || t.id === filtroTitulo) && Conocimientos.visiblePorSkill(t));
 
-    host.innerHTML = html || '<div class="card"><div class="empty"><strong>Sin resultados</strong>Ningún proceso coincide con «' +
-      U.esc(document.getElementById('cBuscar').value) + '».</div></div>';
+    // Deja fuera los títulos que no coinciden con la búsqueda
+    const encontrados = titulos.filter(t => {
+      if (!texto) return true;
+      const procesos = (t.procesos || []).filter(p => Conocimientos.coincide(t, p, texto));
+      return procesos.length > 0 || U.norm(t.titulo + ' ' + (t.descripcion || '') + ' ' + (t.skill || '')).indexOf(texto) > -1;
+    });
+
+    if (!encontrados.length) {
+      host.innerHTML = '<div class="card"><div class="empty"><strong>Sin resultados</strong>' +
+        (texto ? 'Ningún proceso coincide con «' + U.esc(document.getElementById('cBuscar').value) + '»'
+               : 'No hay títulos para el skill «' + U.esc(skillSel) + '»') +
+        '. Los títulos sin skill asignado aparecen siempre.</div></div>';
+      return;
+    }
+
+    // Sin skill elegido, los títulos se agrupan bajo el encabezado de su skill
+    let grupos;
+    if (skillSel) {
+      grupos = [{ skill: skillSel, titulos: encontrados }];
+    } else {
+      const mapa = new Map();
+      encontrados.forEach(t => {
+        const s = Conocimientos.skillDe(t);
+        if (!mapa.has(s)) mapa.set(s, []);
+        mapa.get(s).push(t);
+      });
+      grupos = [...mapa.entries()].map(([skill, ts]) => ({ skill: skill, titulos: ts }))
+        .sort((a, b) => {
+          if (a.skill === Conocimientos.SIN_SKILL) return 1;      // lo general va al final
+          if (b.skill === Conocimientos.SIN_SKILL) return -1;
+          return a.skill.localeCompare(b.skill, 'es');
+        });
+    }
+
+    host.innerHTML = grupos.map(g => {
+      const nProc = g.titulos.reduce((a, t) => a + (t.procesos || []).length, 0);
+      const nArch = g.titulos.reduce((a, t) => a + (t.procesos || []).reduce((b, p) => b + (p.archivos || []).length, 0), 0);
+      const cabecera = (!skillSel || grupos.length > 1)
+        ? '<div class="group-head"><span class="group-head__dot"></span>' +
+          '<span class="group-head__name">' + U.esc(g.skill) + '</span>' +
+          '<span class="group-head__meta">' + g.titulos.length + ' título' + (g.titulos.length === 1 ? '' : 's') +
+          ' · ' + nProc + ' procesos · ' + nArch + ' PDF</span></div>'
+        : '';
+      return cabecera + g.titulos.map(t => Conocimientos.tituloHTML(t, texto)).join('');
+    }).join('');
+  },
+
+  tituloHTML(t, texto) {
+    const procesos = (t.procesos || []).filter(p => Conocimientos.coincide(t, p, texto));
+    const abierto = texto ? true : t.abierto;
+    const nArch = (t.procesos || []).reduce((a, p) => a + (p.archivos || []).length, 0);
+    return '<div class="kb-title' + (abierto ? ' is-open' : '') + '">' +
+      '<div class="kb-title__head" onclick="Conocimientos.toggleTitulo(\'' + t.id + '\')">' +
+        '<span class="kb-title__caret">▶</span>' +
+        '<div class="kb-title__name">' + U.esc(t.titulo) +
+          (t.skill ? ' <span class="tag">' + U.esc(t.skill) + '</span>' : '') +
+          (t.descripcion ? '<div class="kb-title__desc">' + U.esc(t.descripcion) + '</div>' : '') + '</div>' +
+        '<span class="kb-proc__count">' + (t.procesos || []).length + ' procesos · ' + nArch + ' PDF</span>' +
+        '<button class="icon-btn" type="button" title="Agregar proceso" onclick="event.stopPropagation();Conocimientos.nuevoProceso(\'' + t.id + '\')">+</button>' +
+      '</div>' +
+      '<div class="kb-title__body">' +
+        (procesos.length ? procesos.map(p => Conocimientos.procesoHTML(t, p, texto)).join('')
+          : '<div class="empty" style="padding:18px">Este título aún no tiene procesos. ' +
+            '<button class="link-btn" type="button" onclick="Conocimientos.nuevoProceso(\'' + t.id + '\')">Agregar el primero</button></div>') +
+      '</div></div>';
   },
 
   procesoHTML(t, p, texto) {
@@ -137,7 +212,9 @@ const Conocimientos = {
     host.innerHTML = State.conocimientos.map((t, i) =>
       '<div class="manage-item">' +
         '<div class="manage-item__head">' +
-          '<span class="manage-item__name">' + U.esc(t.titulo) + '</span>' +
+          '<span class="manage-item__name">' + U.esc(t.titulo) +
+            (t.skill ? ' <span class="tag">' + U.esc(t.skill) + '</span>'
+                     : ' <span class="tag" style="background:var(--surface-3);color:var(--ink-muted)">General</span>') + '</span>' +
           '<span class="hint">' + (t.procesos || []).length + ' procesos</span>' +
           '<button class="icon-btn" type="button" title="Subir" onclick="Conocimientos.mover(' + i + ',-1)">↑</button>' +
           '<button class="icon-btn" type="button" title="Bajar" onclick="Conocimientos.mover(' + i + ',1)">↓</button>' +
@@ -160,13 +237,19 @@ const Conocimientos = {
 
   renderArchivos() {
     const host = document.getElementById('cFiles');
+    const skillSel = Conocimientos.skillFiltro();
     const filas = [];
-    State.conocimientos.forEach(t => (t.procesos || []).forEach(p => (p.archivos || []).forEach(a =>
-      filas.push({ t: t.titulo, p: p.nombre, a: a, tid: t.id, pid: p.id }))));
-    if (!filas.length) { host.innerHTML = '<div class="empty"><strong>Sin documentos</strong>Adjunta PDF a tus procesos desde la biblioteca.</div>'; return; }
-    host.innerHTML = '<table class="data"><thead><tr><th class="no-sort">Documento</th><th class="no-sort">Título</th>' +
+    State.conocimientos.filter(Conocimientos.visiblePorSkill).forEach(t =>
+      (t.procesos || []).forEach(p => (p.archivos || []).forEach(a =>
+        filas.push({ t: t.titulo, skill: Conocimientos.skillDe(t), p: p.nombre, a: a, tid: t.id, pid: p.id }))));
+    if (!filas.length) {
+      host.innerHTML = '<div class="empty"><strong>Sin documentos' + (skillSel ? ' en ' + U.esc(skillSel) : '') + '</strong>' +
+        'Adjunta PDF a tus procesos desde la biblioteca.</div>';
+      return;
+    }
+    host.innerHTML = '<table class="data"><thead><tr><th class="no-sort">Documento</th><th class="no-sort">Skill</th><th class="no-sort">Título</th>' +
       '<th class="no-sort">Proceso</th><th class="num no-sort">Tamaño</th><th class="no-sort">Cargado</th><th class="no-sort"></th></tr></thead><tbody>' +
-      filas.map(f => '<tr><td class="name">' + U.esc(f.a.nombre) + '</td><td>' + U.esc(f.t) + '</td><td>' + U.esc(f.p) + '</td>' +
+      filas.map(f => '<tr><td class="name">' + U.esc(f.a.nombre) + '</td><td>' + U.esc(f.skill) + '</td><td>' + U.esc(f.t) + '</td><td>' + U.esc(f.p) + '</td>' +
         '<td class="num">' + U.peso(f.a.size) + '</td><td>' + U.fechaCorta(f.a.fecha || '') + '</td>' +
         '<td><button class="btn btn--ghost btn--sm" type="button" onclick="Conocimientos.ver(\'' + f.a.id + '\')">Ver</button> ' +
         '<button class="icon-btn" type="button" title="Descargar" onclick="Conocimientos.descargar(\'' + f.a.id + '\')">⤓</button> ' +
@@ -178,19 +261,35 @@ const Conocimientos = {
   nuevoTitulo() { Conocimientos.editarTitulo(null); },
 
   editarTitulo(id) {
-    const t = id ? State.conocimientos.find(x => x.id === id) : { titulo: '', descripcion: '' };
+    const t = id ? State.conocimientos.find(x => x.id === id) : { titulo: '', descripcion: '', skill: Conocimientos.skillFiltro() };
     if (!t) return;
+    const skills = Conocimientos.skillsDisponibles();
     App.modal({
       titulo: id ? 'Editar título' : 'Nuevo título de conocimiento',
       cuerpo: '<div class="form-grid">' +
         '<div class="field field--full"><label for="ktNombre">Título</label>' +
         '<input type="text" id="ktNombre" value="' + U.esc(t.titulo) + '" placeholder="Ej. Procesos de facturación"></div>' +
+        '<div class="field field--full"><label for="ktSkill">Skill al que pertenece</label>' +
+        '<select id="ktSkill"><option value="">' + U.esc(Conocimientos.SIN_SKILL) + '</option>' +
+          skills.map(s => '<option value="' + U.esc(s) + '"' + (t.skill === s ? ' selected' : '') + '>' + U.esc(s) + '</option>').join('') +
+          '<option value="__nuevo">➕ Otro skill…</option>' +
+        '</select>' +
+        '<input type="text" id="ktSkillNuevo" placeholder="Escribe el nombre del skill" style="display:none;margin-top:6px">' +
+        '<span class="hint">Si lo dejas en «General», el título aparece con cualquier skill.</span></div>' +
         '<div class="field field--full"><label for="ktDesc">Descripción corta</label>' +
         '<input type="text" id="ktDesc" value="' + U.esc(t.descripcion || '') + '" placeholder="Opcional: para qué sirve este grupo de procesos"></div>' +
         '</div><p class="hint" style="margin-top:10px">Dentro de un título puedes crear todos los procesos que necesites, cada uno con sus notas y sus PDF.</p>',
       pie: '<button class="btn btn--ghost" type="button" onclick="App.cerrarModal()">Cancelar</button>' +
            '<button class="btn btn--primary" type="button" onclick="Conocimientos.guardarTitulo(' + (id ? "'" + id + "'" : 'null') + ')">Guardar</button>',
-      alMostrar: () => setTimeout(() => document.getElementById('ktNombre').focus(), 60)
+      alMostrar: () => {
+        const sel = document.getElementById('ktSkill');
+        sel.addEventListener('change', () => {
+          const caja = document.getElementById('ktSkillNuevo');
+          caja.style.display = sel.value === '__nuevo' ? 'block' : 'none';
+          if (sel.value === '__nuevo') caja.focus();
+        });
+        setTimeout(() => document.getElementById('ktNombre').focus(), 60);
+      }
     });
   },
 
@@ -198,16 +297,19 @@ const Conocimientos = {
     const nombre = document.getElementById('ktNombre').value.trim();
     if (!nombre) return App.toast('Escribe un título', '', 'bad');
     const desc = document.getElementById('ktDesc').value.trim();
+    const sel = document.getElementById('ktSkill').value;
+    const skill = sel === '__nuevo' ? document.getElementById('ktSkillNuevo').value.trim() : sel;
+
     if (id) {
       const t = State.conocimientos.find(x => x.id === id);
-      t.titulo = nombre; t.descripcion = desc;
+      t.titulo = nombre; t.descripcion = desc; t.skill = skill;
     } else {
-      State.conocimientos.push({ id: U.uid('kt'), titulo: nombre, descripcion: desc, abierto: true, procesos: [] });
+      State.conocimientos.push({ id: U.uid('kt'), titulo: nombre, descripcion: desc, skill: skill, abierto: true, procesos: [] });
     }
     await App.guardarYa();
     App.cerrarModal();
-    Conocimientos.render();
-    App.toast('Título guardado', nombre, 'ok');
+    Conocimientos.init(); Conocimientos.render();
+    App.toast('Título guardado', nombre + (skill ? ' · ' + skill : ''), 'ok');
   },
 
   async borrarTitulo(id) {

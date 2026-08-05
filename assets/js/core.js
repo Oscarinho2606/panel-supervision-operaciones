@@ -558,11 +558,35 @@ const App = {
     return [...mapa.values()].map(a => ({ ...a, skills: [...a.skills] })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   },
 
+  /** Los skills de la operación salen de la malla; los registros solo completan. */
   skills() {
     const s = new Set();
-    State.registros.forEach(r => r.skill && s.add(r.skill));
     State.turnos.forEach(t => t.skill && s.add(t.skill));
+    State.registros.forEach(r => r.skill && s.add(r.skill));
     return [...s].sort((a, b) => a.localeCompare(b, 'es'));
+  },
+
+  /**
+   * Skill al que pertenece un agente. Manda la malla de turnos, porque es donde
+   * queda registrado el segmento en el que está programado; si no aparece en la
+   * malla, se usa el skill de sus registros de rendimiento.
+   */
+  skillDeAgente(nombre) {
+    const contar = lista => {
+      const c = {};
+      lista.forEach(x => { if (x.agente === nombre && x.skill) c[x.skill] = (c[x.skill] || 0) + 1; });
+      const claves = Object.keys(c);
+      return claves.length ? claves.sort((a, b) => c[b] - c[a])[0] : null;
+    };
+    return contar(State.turnos) || contar(State.registros) || 'Sin skill';
+  },
+
+  /** Todos los skills en los que aparece el agente (malla y registros). */
+  skillsDeAgente(nombre) {
+    const s = new Set();
+    State.turnos.forEach(t => { if (t.agente === nombre && t.skill) s.add(t.skill); });
+    State.registros.forEach(r => { if (r.agente === nombre && r.skill) s.add(r.skill); });
+    return [...s];
   },
 
   indicadoresActivos() { return State.indicadores.filter(m => m.activo !== false); },

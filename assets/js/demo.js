@@ -7,19 +7,20 @@
 
 const Demo = {
 
+  /* Los skills son los segmentos de la malla de programación */
   AGENTES: [
-    { n: 'María Gómez',      d: '1020304050', s: 'Ventas',    nivel: 1.08 },
-    { n: 'Carlos Ruiz',      d: '1020304051', s: 'Retención', nivel: 0.94 },
-    { n: 'Ana Torres',       d: '1020304052', s: 'Soporte',   nivel: 1.02 },
-    { n: 'Luis Peña',        d: '1020304053', s: 'Ventas',    nivel: 0.86 },
-    { n: 'Diana Ramírez',    d: '1020304054', s: 'Soporte',   nivel: 1.11 },
-    { n: 'Jorge Castillo',   d: '1020304055', s: 'Retención', nivel: 0.99 },
-    { n: 'Paola Herrera',    d: '1020304056', s: 'Ventas',    nivel: 1.05 },
-    { n: 'Andrés Molina',    d: '1020304057', s: 'Facturación', nivel: 0.91 },
-    { n: 'Laura Quintero',   d: '1020304058', s: 'Soporte',   nivel: 1.00 },
-    { n: 'Felipe Vargas',    d: '1020304059', s: 'Facturación', nivel: 0.83 },
-    { n: 'Natalia Cárdenas', d: '1020304060', s: 'Retención', nivel: 1.07 },
-    { n: 'Sebastián Rojas',  d: '1020304061', s: 'Ventas',    nivel: 0.96 }
+    { n: 'María Gómez',      d: '1020304050', s: 'INB',   nivel: 1.08 },
+    { n: 'Carlos Ruiz',      d: '1020304051', s: 'INB',   nivel: 0.94 },
+    { n: 'Ana Torres',       d: '1020304052', s: 'INB',   nivel: 1.02 },
+    { n: 'Luis Peña',        d: '1020304053', s: 'INB',   nivel: 0.86 },
+    { n: 'Diana Ramírez',    d: '1020304054', s: 'OUT',   nivel: 1.11 },
+    { n: 'Jorge Castillo',   d: '1020304055', s: 'OUT',   nivel: 0.99 },
+    { n: 'Paola Herrera',    d: '1020304056', s: 'OUT',   nivel: 1.05 },
+    { n: 'Andrés Molina',    d: '1020304057', s: 'EMAIL', nivel: 0.91 },
+    { n: 'Laura Quintero',   d: '1020304058', s: 'EMAIL', nivel: 1.00 },
+    { n: 'Felipe Vargas',    d: '1020304059', s: 'CHAT',  nivel: 0.83 },
+    { n: 'Natalia Cárdenas', d: '1020304060', s: 'PQR',   nivel: 1.07 },
+    { n: 'Sebastián Rojas',  d: '1020304061', s: 'RRSS',  nivel: 0.96 }
   ],
 
   rnd(semilla) {                       // aleatorio reproducible
@@ -126,9 +127,9 @@ const Demo = {
 
   requerido() {
     const req = {};
-    const skills = ['Ventas', 'Retención', 'Soporte', 'Facturación'];
+    const skills = ['INB', 'OUT', 'EMAIL', 'CHAT', 'PQR', 'RRSS'];
     const curva = { 6: .4, 7: .7, 8: 1, 9: 1, 10: 1.1, 11: 1.1, 12: .9, 13: .9, 14: 1, 15: 1, 16: 1, 17: .9, 18: .7, 19: .6, 20: .5, 21: .4 };
-    const base = { 'Ventas': 2, 'Retención': 2, 'Soporte': 2, 'Facturación': 1 };
+    const base = { 'INB': 3, 'OUT': 2, 'EMAIL': 2, 'CHAT': 1, 'PQR': 1, 'RRSS': 1 };
     skills.forEach(s => {
       for (let h = 0; h < 24; h++) {
         const f = curva[h];
@@ -142,8 +143,8 @@ const Demo = {
   conocimiento() {
     return [
       {
-        id: U.uid('kt'), titulo: 'Procesos de facturación', abierto: true,
-        descripcion: 'Todo lo relacionado con facturas, notas crédito y cobros',
+        id: U.uid('kt'), titulo: 'Gestión de llamadas entrantes', abierto: true, skill: 'INB',
+        descripcion: 'Procesos de la línea de atención telefónica',
         procesos: [
           {
             id: U.uid('kp'), nombre: 'Generar una nota crédito', tags: ['facturación', 'ajustes'], abierto: true, archivos: [],
@@ -167,7 +168,8 @@ const Demo = {
         ]
       },
       {
-        id: U.uid('kt'), titulo: 'Retención de clientes', descripcion: 'Guiones y procedimientos para evitar la cancelación',
+        id: U.uid('kt'), titulo: 'Campañas de salida', skill: 'OUT',
+        descripcion: 'Guiones y procedimientos de las campañas salientes',
         procesos: [
           {
             id: U.uid('kp'), nombre: 'Solicitud de cancelación voluntaria', tags: ['retención', 'guion'], archivos: [],
@@ -189,7 +191,45 @@ const Demo = {
         ]
       },
       {
-        id: U.uid('kt'), titulo: 'Operación diaria del equipo', descripcion: 'Rutinas del supervisor y manejo de novedades',
+        id: U.uid('kt'), titulo: 'Radicación y respuesta de PQR', skill: 'PQR',
+        descripcion: 'Peticiones, quejas y reclamos: tiempos y escalamiento',
+        procesos: [
+          {
+            id: U.uid('kp'), nombre: 'Radicar una queja formal', tags: ['pqr', 'radicación'], archivos: [],
+            notas: '1. Confirmar los datos del titular antes de radicar.\n' +
+                   '2. Clasificar el caso: petición, queja, reclamo o sugerencia.\n' +
+                   '3. Registrar el detalle textual de lo que dice el cliente, sin interpretar.\n' +
+                   '4. Entregar el número de radicado y el tiempo legal de respuesta (15 días hábiles).\n' +
+                   '5. Adjuntar los soportes que el cliente envíe por correo.'
+          },
+          {
+            id: U.uid('kp'), nombre: 'Caso próximo a vencer', tags: ['pqr', 'alertas'], archivos: [],
+            notas: 'A partir del día 10 hábil el caso entra en alerta.\n\n' +
+                   '· Revisar el estado con el área responsable.\n' +
+                   '· Si no hay respuesta, escalar al coordinador el mismo día.\n' +
+                   '· Nunca dejar vencer un caso sin dejar traza de la gestión.'
+          }
+        ]
+      },
+      {
+        id: U.uid('kt'), titulo: 'Atención por correo y chat', skill: 'EMAIL',
+        descripcion: 'Estándares de respuesta escrita',
+        procesos: [
+          {
+            id: U.uid('kp'), nombre: 'Estructura de una respuesta escrita', tags: ['email', 'calidad'], archivos: [],
+            notas: '1. Saludo con el nombre del cliente.\n' +
+                   '2. Confirmar que entendiste la solicitud, en una frase.\n' +
+                   '3. Dar la respuesta concreta primero; el detalle después.\n' +
+                   '4. Indicar el siguiente paso y quién lo hace.\n' +
+                   '5. Cerrar ofreciendo el canal de contacto.\n\n' +
+                   'Tiempo de respuesta comprometido: 4 horas hábiles.'
+          }
+        ]
+      },
+      {
+        // Sin skill: es material general, visible desde cualquier skill
+        id: U.uid('kt'), titulo: 'Operación diaria del equipo', skill: '',
+        descripcion: 'Rutinas del supervisor y manejo de novedades',
         procesos: [
           {
             id: U.uid('kp'), nombre: 'Apertura de turno', tags: ['supervisión'], archivos: [],

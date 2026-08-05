@@ -201,7 +201,9 @@ const Rend = {
       porAgente.get(r.agente).push(r);
     });
     return [...porAgente.entries()].map(([agente, rs]) => {
-      const fila = { agente: agente, dias: new Set(rs.map(r => r.fecha)).size, skill: rs[rs.length - 1].skill || '', valores: {} };
+      // El skill sale de la malla; si el reporte trae servicio propio, ese manda
+      const fila = { agente: agente, dias: new Set(rs.map(r => r.fecha)).size,
+        skill: rs[rs.length - 1].skill || App.skillDeAgente(agente), valores: {} };
       App.indicadoresActivos().forEach(m => { fila.valores[m.id] = U.prom(rs.map(r => r.valores && r.valores[m.id])); });
       fila.puntaje = App.puntaje(rs);
       return fila;

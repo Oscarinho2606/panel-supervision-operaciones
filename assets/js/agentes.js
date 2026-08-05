@@ -15,6 +15,8 @@ const Agentes = {
     sel.innerHTML = inds.map(m => '<option value="' + m.id + '">' + U.esc(m.nombre) + '</option>').join('');
     if (previo && inds.some(m => m.id === previo)) sel.value = previo;
 
+    Agentes.pintarSkills();
+
     const r = App.rangoDatos(State.registros);
     if (!document.getElementById('aDesde').value) document.getElementById('aDesde').value = r.min;
     if (!document.getElementById('aHasta').value) document.getElementById('aHasta').value = r.max;
@@ -26,15 +28,58 @@ const Agentes = {
     Agentes.pintarFichaSel();
   },
 
+  /* -------------------------------- Skill -------------------------------- */
+  pintarSkills() {
+    const sel = document.getElementById('aSkill');
+    if (!sel) return;
+    const previo = sel.value;
+    const skills = App.skills();
+    sel.innerHTML = '<option value="">Todos (agrupados por skill)</option>' +
+      skills.map(s => '<option value="' + U.esc(s) + '">' + U.esc(s) + '</option>').join('');
+    if (previo && skills.indexOf(previo) > -1) sel.value = previo;
+  },
+
+  skillFiltro() {
+    const sel = document.getElementById('aSkill');
+    return sel ? sel.value : '';
+  },
+
+  /** Agentes que trabajan el skill filtrado, según la malla de turnos. */
+  agentesDelSkill() {
+    const sk = Agentes.skillFiltro();
+    if (!sk) return App.agentes();
+    return App.agentes().filter(a => App.skillsDeAgente(a.nombre).indexOf(sk) > -1);
+  },
+
+  /** Skill del agente: el segmento en el que está programado en la malla. */
+  skillPrincipal(nombre) { return App.skillDeAgente(nombre); },
+
+  onSkill() {
+    // Al cambiar de skill, deja en el tablero solo los agentes que pertenecen a él
+    const sk = Agentes.skillFiltro();
+    if (sk) {
+      const validos = new Set(Agentes.agentesDelSkill().map(a => a.nombre));
+      const quedan = (State.ui.agentesSel || []).filter(n => validos.has(n));
+      State.ui.agentesSel = quedan.length ? quedan : [...validos].slice(0, 12);
+    }
+    App.guardar();
+    Agentes.render();
+  },
+
   /* ------------------------------ Selector ------------------------------- */
   renderPicker() {
     const host = document.getElementById('aPicker');
     const b = U.norm(document.getElementById('aBuscar').value || '');
-    const todos = App.agentes();
+    const todos = Agentes.agentesDelSkill();
     const lista = b ? todos.filter(a => U.norm(a.nombre + ' ' + a.doc).indexOf(b) > -1) : todos;
 
-    if (!todos.length) {
+    if (!App.agentes().length) {
       host.innerHTML = '<div class="empty" style="padding:18px"><strong>Todavía no hay agentes</strong>Carga registros de rendimiento o una malla de turnos para que aparezcan aquí.</div>';
+      return;
+    }
+    if (!todos.length) {
+      host.innerHTML = '<div class="empty" style="padding:18px"><strong>Ningún agente en «' + U.esc(Agentes.skillFiltro()) + '»</strong>' +
+        'Cambia el skill o selecciona «Todos».</div>';
       return;
     }
     const sel = new Set(State.ui.agentesSel || []);
@@ -55,7 +100,9 @@ const Agentes = {
   },
 
   seleccionarTodos() {
-    State.ui.agentesSel = App.agentes().map(a => a.nombre);
+    // Agrega los que están visibles con el skill filtrado, sin quitar los demás
+    const nuevos = Agentes.agentesDelSkill().map(a => a.nombre);
+    State.ui.agentesSel = [...new Set((State.ui.agentesSel || []).concat(nuevos))];
     App.guardar(); Agentes.render();
   },
   limpiarSeleccion() {
@@ -67,8 +114,9 @@ const Agentes = {
     const sel = document.getElementById('aFichaSel');
     if (!sel) return;
     const previo = sel.value;
-    const lista = App.agentes();
-    sel.innerHTML = lista.map(a => '<option value="' + U.esc(a.nombre) + '">' + U.esc(a.nombre) + '</option>').join('');
+    const lista = Agentes.agentesDelSkill();
+    sel.innerHTML = lista.map(a => '<option value="' + U.esc(a.nombre) + '">' + U.esc(a.nombre) +
+      ' — ' + U.esc(App.skillDeAgente(a.nombre)) + '</option>').join('');
     if (previo && lista.some(a => a.nombre === previo)) sel.value = previo;
   },
 
@@ -77,11 +125,20 @@ const Agentes = {
     return { desde: document.getElementById('aDesde').value, hasta: document.getElementById('aHasta').value };
   },
 
+  /**
+   * Registros del agente en el periodo. Si hay un skill filtrado y sus registros
+   * traen skill, se toman solo los de ese skill; si el reporte de indicadores no
+   * trae la columna de servicio, se toman todos (el agente ya quedó filtrado por
+   * el segmento que tiene en la malla).
+   */
   registrosDe(nombre) {
     const r = Agentes.rango();
-    return State.registros
-      .filter(x => x.agente === nombre && (!r.desde || x.fecha >= r.desde) && (!r.hasta || x.fecha <= r.hasta))
-      .sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const sk = Agentes.skillFiltro();
+    const enRango = State.registros.filter(x => x.agente === nombre &&
+      (!r.desde || x.fecha >= r.desde) && (!r.hasta || x.fecha <= r.hasta));
+    const propios = sk ? enRango.filter(x => x.skill === sk) : enRango;
+    const usar = (sk && !propios.length && !enRango.some(x => x.skill)) ? enRango : propios;
+    return usar.sort((a, b) => a.fecha.localeCompare(b.fecha));
   },
 
   /** Fechas del periodo presentes en los datos (eje X común a todas las tarjetas). */
@@ -106,60 +163,90 @@ const Agentes = {
     const host = document.getElementById('aGrid');
     const inds = App.indicadoresActivos();
     const ind = App.indicador(document.getElementById('aMetric').value) || inds[0];
-    let nombres = (State.ui.agentesSel || []).slice();
+    const skillSel = Agentes.skillFiltro();
+    // Con un skill filtrado solo se muestran los agentes que lo atienden
+    const delSkill = new Set(Agentes.agentesDelSkill().map(a => a.nombre));
+    let nombres = (State.ui.agentesSel || []).filter(n => !skillSel || delSkill.has(n));
 
-    if (!nombres.length) {
-      host.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><strong>Ningún agente agregado</strong>' +
-        'Selecciona arriba los agentes que quieras seguir. Cada uno aparecerá con su propio gráfico individual.</div></div>';
-      return;
-    }
     if (!ind) {
       host.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><strong>No hay indicadores configurados</strong>Ve a Rendimiento → Indicadores y metas.</div></div>';
       return;
     }
+    if (!nombres.length) {
+      host.innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty"><strong>Ningún agente agregado' +
+        (skillSel ? ' en ' + U.esc(skillSel) : '') + '</strong>' +
+        'Selecciona arriba los agentes que quieras seguir. Cada uno aparecerá con su propio gráfico individual.</div></div>';
+      return;
+    }
 
-    // Orden de las tarjetas
     const conDatos = nombres.map(n => {
       const regs = Agentes.registrosDe(n);
       const prom = U.prom(regs.map(r => r.valores && r.valores[ind.id]));
-      return { nombre: n, regs: regs, prom: prom, cump: App.cumplimiento(prom, ind) };
+      return {
+        nombre: n, regs: regs, prom: prom, cump: App.cumplimiento(prom, ind),
+        skill: skillSel || Agentes.skillPrincipal(n)
+      };
     });
+
     const orden = document.getElementById('aOrden').value;
-    if (orden === 'mejor') conDatos.sort((a, b) => (b.cump == null ? -1 : b.cump) - (a.cump == null ? -1 : a.cump));
-    else if (orden === 'peor') conDatos.sort((a, b) => (a.cump == null ? 2 : a.cump) - (b.cump == null ? 2 : b.cump));
-    else conDatos.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    const ordenar = arr => {
+      if (orden === 'mejor') return arr.sort((a, b) => (b.cump == null ? -1 : b.cump) - (a.cump == null ? -1 : a.cump));
+      if (orden === 'peor') return arr.sort((a, b) => (a.cump == null ? 2 : a.cump) - (b.cump == null ? 2 : b.cump));
+      return arr.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    };
+
+    // Sin skill elegido, las tarjetas se agrupan bajo el encabezado de cada skill
+    let grupos;
+    if (skillSel) {
+      grupos = [{ skill: skillSel, agentes: ordenar(conDatos) }];
+    } else {
+      const mapa = new Map();
+      conDatos.forEach(a => { if (!mapa.has(a.skill)) mapa.set(a.skill, []); mapa.get(a.skill).push(a); });
+      grupos = [...mapa.entries()].map(([skill, agentes]) => ({ skill: skill, agentes: ordenar(agentes) }))
+        .sort((a, b) => a.skill.localeCompare(b.skill, 'es'));
+    }
 
     const fechas = Agentes.fechasComunes(nombres);
     const tipo = document.getElementById('aTipo').value;
+    const orden2 = [];                                   // orden real de pintado, para los gráficos
 
-    host.innerHTML = conDatos.map((a, i) => {
-      const est = App.estadoCumplimiento(a.cump);
-      const vals = a.regs.map(r => r.valores && r.valores[ind.id]).filter(v => v != null);
-      const mejor = vals.length ? (ind.direccion === 'down' ? Math.min(...vals) : Math.max(...vals)) : null;
-      const puntaje = App.puntaje(a.regs);
-      const skills = [...new Set(a.regs.map(r => r.skill).filter(Boolean))];
-      return '<div class="agent-card">' +
-        '<div class="agent-card__head">' +
-          '<div class="avatar">' + U.esc(U.iniciales(a.nombre)) + '</div>' +
-          '<div class="agent-card__id"><div class="agent-card__name">' + U.esc(a.nombre) + '</div>' +
-          '<div class="agent-card__meta">' + (skills.length ? U.esc(skills.join(' · ')) : 'Sin skill') + ' · ' + a.regs.length + ' días</div></div>' +
-          '<span class="badge ' + est.clase + '">' + est.etiqueta + '</span>' +
-        '</div>' +
-        '<div class="agent-card__stats">' +
-          '<div class="mini-stat"><div class="mini-stat__l">Promedio</div><div class="mini-stat__v">' + U.fmt(a.prom, ind.unidad) + '</div></div>' +
-          '<div class="mini-stat"><div class="mini-stat__l">Mejor día</div><div class="mini-stat__v">' + U.fmt(mejor, ind.unidad) + '</div></div>' +
-          '<div class="mini-stat"><div class="mini-stat__l">Puntaje</div><div class="mini-stat__v">' + (puntaje == null ? '—' : U.dec(puntaje, 0) + '%') + '</div></div>' +
-        '</div>' +
-        '<div class="chart-host" id="agc-' + i + '" style="min-height:150px"></div>' +
-        '<div class="stack" style="margin-top:6px">' +
-          '<button class="link-btn" type="button" onclick="Agentes.verFicha(\'' + U.js(a.nombre) + '\')">Ver ficha completa →</button>' +
-          '<button class="link-btn" type="button" onclick="Agentes.quitar(\'' + U.js(a.nombre) + '\')">Quitar del tablero</button>' +
-        '</div>' +
-      '</div>';
+    host.innerHTML = grupos.map(g => {
+      const prom = U.prom(g.agentes.map(a => a.prom));
+      const cabecera = (grupos.length > 1 || !skillSel)
+        ? '<div class="group-head"><span class="group-head__dot"></span>' +
+          '<span class="group-head__name">' + U.esc(g.skill) + '</span>' +
+          '<span class="group-head__meta">' + g.agentes.length + ' agente' + (g.agentes.length === 1 ? '' : 's') +
+          ' · promedio ' + U.fmt(prom, ind.unidad) + ' · meta ' + U.fmt(ind.meta, ind.unidad) + '</span></div>'
+        : '';
+      return cabecera + g.agentes.map(a => {
+        const i = orden2.push(a) - 1;
+        const est = App.estadoCumplimiento(a.cump);
+        const vals = a.regs.map(r => r.valores && r.valores[ind.id]).filter(v => v != null);
+        const mejor = vals.length ? (ind.direccion === 'down' ? Math.min(...vals) : Math.max(...vals)) : null;
+        const puntaje = App.puntaje(a.regs);
+        return '<div class="agent-card">' +
+          '<div class="agent-card__head">' +
+            '<div class="avatar">' + U.esc(U.iniciales(a.nombre)) + '</div>' +
+            '<div class="agent-card__id"><div class="agent-card__name">' + U.esc(a.nombre) + '</div>' +
+            '<div class="agent-card__meta">' + U.esc(a.skill) + ' · ' + a.regs.length + ' días</div></div>' +
+            '<span class="badge ' + est.clase + '">' + est.etiqueta + '</span>' +
+          '</div>' +
+          '<div class="agent-card__stats">' +
+            '<div class="mini-stat"><div class="mini-stat__l">Promedio</div><div class="mini-stat__v">' + U.fmt(a.prom, ind.unidad) + '</div></div>' +
+            '<div class="mini-stat"><div class="mini-stat__l">Mejor día</div><div class="mini-stat__v">' + U.fmt(mejor, ind.unidad) + '</div></div>' +
+            '<div class="mini-stat"><div class="mini-stat__l">Puntaje</div><div class="mini-stat__v">' + (puntaje == null ? '—' : U.dec(puntaje, 0) + '%') + '</div></div>' +
+          '</div>' +
+          '<div class="chart-host" id="agc-' + i + '" style="min-height:150px"></div>' +
+          '<div class="stack" style="margin-top:6px">' +
+            '<button class="link-btn" type="button" onclick="Agentes.verFicha(\'' + U.js(a.nombre) + '\')">Ver ficha completa →</button>' +
+            '<button class="link-btn" type="button" onclick="Agentes.quitar(\'' + U.js(a.nombre) + '\')">Quitar del tablero</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
     }).join('');
 
     // Un gráfico por tarjeta, con el mismo eje de fechas para poder compararlas de un vistazo
-    conDatos.forEach((a, i) => {
+    orden2.forEach((a, i) => {
       const mapa = {};
       a.regs.forEach(r => { if (r.valores && r.valores[ind.id] != null) mapa[r.fecha] = r.valores[ind.id]; });
       const valores = fechas.map(f => mapa[f] == null ? null : mapa[f]);
@@ -206,7 +293,7 @@ const Agentes = {
     }
     const fechas = regs.map(r => r.fecha);
     const puntaje = App.puntaje(regs);
-    const skills = [...new Set(regs.map(r => r.skill).filter(Boolean))];
+    const skills = App.skillsDeAgente(nombre);
     const equipo = State.registros.filter(r => (!Agentes.rango().desde || r.fecha >= Agentes.rango().desde) && (!Agentes.rango().hasta || r.fecha <= Agentes.rango().hasta));
 
     host.innerHTML =
@@ -266,7 +353,9 @@ const Agentes = {
   renderComparar() {
     const inds = App.indicadoresActivos();
     const ind = App.indicador(document.getElementById('aMetric').value) || inds[0];
-    const todos = (State.ui.agentesSel || []);
+    const skillSel = Agentes.skillFiltro();
+    const delSkill = new Set(Agentes.agentesDelSkill().map(a => a.nombre));
+    const todos = (State.ui.agentesSel || []).filter(n => !skillSel || delSkill.has(n));
     const nombres = todos.slice(0, 6);
     const fechas = Agentes.fechasComunes(nombres);
 

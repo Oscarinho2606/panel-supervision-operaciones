@@ -298,6 +298,10 @@
 
   <div class="filterbar filterbar--compact">
     <div class="field">
+      <label for="aSkill">Skill</label>
+      <select id="aSkill" onchange="Agentes.onSkill()"><option value="">Todos (agrupados por skill)</option></select>
+    </div>
+    <div class="field">
       <label for="aMetric">Indicador del gráfico</label>
       <select id="aMetric" onchange="Agentes.render()"></select>
     </div>
@@ -544,6 +548,10 @@
     <div class="field field--grow">
       <label for="cBuscar">Buscar proceso, nota o archivo</label>
       <input type="search" id="cBuscar" placeholder="Ej. devolución, retención, escalamiento…" oninput="Conocimientos.render()">
+    </div>
+    <div class="field">
+      <label for="cSkill">Skill</label>
+      <select id="cSkill" onchange="Conocimientos.render()"><option value="">Todos (agrupados por skill)</option></select>
     </div>
     <div class="field">
       <label for="cTitulo">Título</label>
