@@ -325,6 +325,7 @@ const App = {
   listo: false,
 
   async init() {
+    document.body.classList.add('sin-animacion');
     const modo = await Store.abrir();
     const guardado = await Store.get('kv', 'state');
     if (guardado) {
@@ -347,8 +348,13 @@ const App = {
     Rend.init(); Agentes.init(); Turnos.init(); Conocimientos.init();
     App.pintarAjustes();
     App.listo = true;
-    App.go(App.vistaDelEnlace() || State.ui.vista || 'rendimiento', true);
+    const vista = App.vistaDelEnlace() || State.ui.vista || 'rendimiento';
+    const tab = App.tabDelEnlace();
+    if (tab) State.ui.tabs[vista] = tab;
+    App.go(vista, true);
+    if (tab) App.tab(vista, tab);
     Demo.autoSiVacio();
+    requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('sin-animacion')));
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') App.cerrarModal();
@@ -361,6 +367,12 @@ const App = {
     const partes = String(location.hash || '').replace('#', '').split(/[,&]/);
     const vistas = ['rendimiento', 'agentes', 'turnos', 'conocimientos', 'ajustes'];
     return partes.map(p => p.trim()).find(p => vistas.indexOf(p) > -1) || null;
+  },
+
+  /** Y también una pestaña concreta: #rendimiento,r-ranking */
+  tabDelEnlace() {
+    const partes = String(location.hash || '').replace('#', '').split(/[,&]/).map(p => p.trim());
+    return partes.find(p => p && document.getElementById('tab-' + p)) || null;
   },
 
   /* --- Navegación --- */

@@ -144,14 +144,15 @@
     <div class="card">
       <div class="card__head">
         <div>
-          <h3 class="card__title">Ranking del equipo</h3>
-          <p class="card__sub">Puntaje global = promedio ponderado del cumplimiento de cada indicador contra su meta</p>
+          <h3 class="card__title">Ranking del equipo por skill</h3>
+          <p class="card__sub" id="rRankingSub">Todos los agentes de la malla, agrupados en su skill</p>
         </div>
         <div class="card__tools">
+          <label class="checkline"><input type="checkbox" id="rSinDatos" checked onchange="Rend.renderRanking()"> Incluir agentes sin datos</label>
           <button type="button" class="btn btn--ghost btn--sm" onclick="Rend.exportRanking()">Exportar CSV</button>
         </div>
       </div>
-      <div class="table-wrap" id="rRankingTable"></div>
+      <div class="table-wrap table-wrap--tall" id="rRankingTable"></div>
     </div>
   </div>
 

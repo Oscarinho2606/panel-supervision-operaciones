@@ -88,8 +88,20 @@ const Rend = {
     return State.registros.filter(r => {
       if (f.desde && r.fecha < f.desde) return false;
       if (f.hasta && r.fecha > f.hasta) return false;
-      if (f.skill && r.skill !== f.skill) return false;
+      // Si el reporte no trae servicio, el skill del agente sale de la malla
+      if (f.skill && (r.skill || App.skillDeAgente(r.agente)) !== f.skill) return false;
       if (b && U.norm(r.agente + ' ' + (r.doc || '')).indexOf(b) < 0) return false;
+      return true;
+    });
+  },
+
+  /** Agentes que deben aparecer en el listado según los filtros activos. */
+  agentesFiltrados() {
+    const f = State.ui.filtros || {};
+    const b = U.norm(f.buscar || '');
+    return App.agentes().filter(a => {
+      if (f.skill && App.skillsDeAgente(a.nombre).indexOf(f.skill) < 0) return false;
+      if (b && U.norm(a.nombre + ' ' + (a.doc || '')).indexOf(b) < 0) return false;
       return true;
     });
   },
@@ -133,10 +145,11 @@ const Rend = {
         '<div class="kpi__value" style="font-size:18px">Aún no hay registros en este periodo</div>' +
         '<div class="kpi__foot">Ve a <strong>Cargar datos</strong> para subir tu Excel o registrar manualmente. También puedes probar con datos de ejemplo desde Ajustes.</div></div>';
     } else {
+      const enPlantilla = Rend.agentesFiltrados().length;
       html += '<div class="kpi kpi--hero"><div class="kpi__label">Puntaje global del equipo</div>' +
         '<div class="kpi__value">' + (puntaje == null ? '—' : U.dec(puntaje, 1) + '%') + '</div>' +
         '<div class="kpi__foot">' + Rend.deltaHTML(puntaje, puntajePrev, 'up', 'pct') +
-        '<span>' + agentes + ' agentes · ' + dias + ' días</span></div></div>';
+        '<span>' + agentes + (enPlantilla > agentes ? ' de ' + enPlantilla : '') + ' agentes · ' + dias + ' días</span></div></div>';
 
       inds.slice(0, 5).forEach(ind => {
         const v = U.prom(regs.map(r => r.valores && r.valores[ind.id]));
@@ -194,16 +207,29 @@ const Rend = {
   },
 
   /* ------------------------------- Ranking ------------------------------- */
-  ranking(regs) {
+  /**
+   * @param {Array} regs registros ya filtrados
+   * @param {boolean} incluirSinDatos agrega a los agentes de la malla que aún no
+   *        tienen indicadores cargados, para tener la plantilla completa a la vista
+   */
+  ranking(regs, incluirSinDatos) {
     const porAgente = new Map();
     regs.forEach(r => {
       if (!porAgente.has(r.agente)) porAgente.set(r.agente, []);
       porAgente.get(r.agente).push(r);
     });
+    if (incluirSinDatos) {
+      Rend.agentesFiltrados().forEach(a => { if (!porAgente.has(a.nombre)) porAgente.set(a.nombre, []); });
+    }
     return [...porAgente.entries()].map(([agente, rs]) => {
       // El skill sale de la malla; si el reporte trae servicio propio, ese manda
-      const fila = { agente: agente, dias: new Set(rs.map(r => r.fecha)).size,
-        skill: rs[rs.length - 1].skill || App.skillDeAgente(agente), valores: {} };
+      const fila = {
+        agente: agente,
+        doc: (rs.find(r => r.doc) || {}).doc || '',
+        dias: new Set(rs.map(r => r.fecha)).size,
+        skill: (rs.length && rs[rs.length - 1].skill) || App.skillDeAgente(agente),
+        valores: {}, sinDatos: !rs.length
+      };
       App.indicadoresActivos().forEach(m => { fila.valores[m.id] = U.prom(rs.map(r => r.valores && r.valores[m.id])); });
       fila.puntaje = App.puntaje(rs);
       return fila;
@@ -211,44 +237,82 @@ const Rend = {
   },
 
   renderRanking() {
-    const rank = Rend.ranking(Rend.filtrados());
     const inds = App.indicadoresActivos();
     const host = document.getElementById('rRankingTable');
-    if (!rank.length) { host.innerHTML = '<div class="empty"><strong>Sin agentes en el periodo</strong>Ajusta los filtros o carga datos.</div>'; return; }
+    const casilla = document.getElementById('rSinDatos');
+    const incluir = !casilla || casilla.checked;
+    const rank = Rend.ranking(Rend.filtrados(), incluir);
+
+    if (!rank.length) {
+      host.innerHTML = '<div class="empty"><strong>Sin agentes</strong>Carga la malla de turnos o los indicadores para ver aquí a tu equipo.</div>';
+      document.getElementById('rRankingSub').textContent = 'Todos los agentes de la malla, agrupados en su skill';
+      return;
+    }
+
+    // Un grupo por skill, con los agentes ordenados por puntaje dentro de cada uno
+    const mapa = new Map();
+    rank.forEach(r => {
+      const s = r.skill || 'Sin skill';
+      if (!mapa.has(s)) mapa.set(s, []);
+      mapa.get(s).push(r);
+    });
+    const grupos = [...mapa.entries()].map(([skill, filas]) => ({ skill: skill, filas: filas }))
+      .sort((a, b) => {
+        if (a.skill === 'Sin skill') return 1;
+        if (b.skill === 'Sin skill') return -1;
+        return a.skill.localeCompare(b.skill, 'es');
+      });
+
+    const conDatos = rank.filter(r => !r.sinDatos).length;
+    document.getElementById('rRankingSub').textContent =
+      rank.length + ' agentes en ' + grupos.length + ' skills · ' + conDatos + ' con indicadores cargados' +
+      (rank.length - conDatos ? ' · ' + (rank.length - conDatos) + ' sin datos aún' : '');
+
     const maxP = Math.max(...rank.map(r => r.puntaje || 0), 100);
+    const nCols = 5 + inds.length + 2;
 
     host.innerHTML = '<table class="data"><thead><tr>' +
-      '<th class="no-sort">#</th><th class="no-sort">Agente</th><th class="no-sort">Skill</th><th class="num no-sort">Días</th>' +
+      '<th class="no-sort">#</th><th class="no-sort">Agente</th><th class="no-sort">Documento</th><th class="num no-sort">Días</th>' +
       inds.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') +
       '<th class="num no-sort">Puntaje global</th><th class="no-sort">Estado</th></tr></thead><tbody>' +
-      rank.map((r, i) => {
-        const est = App.estadoCumplimiento(r.puntaje == null ? null : r.puntaje / 100);
-        return '<tr>' +
-          '<td class="rank">' + (i + 1) + '</td>' +
-          '<td class="name">' + U.esc(r.agente) + '</td>' +
-          '<td>' + U.esc(r.skill || '—') + '</td>' +
-          '<td class="num">' + r.dias + '</td>' +
-          inds.map(m => {
-            const c = App.cumplimiento(r.valores[m.id], m);
-            const col = c == null ? 'var(--ink-muted)' : c >= 1 ? 'var(--ok)' : c >= .9 ? 'var(--warn)' : 'var(--bad)';
-            return '<td class="num" style="color:' + col + ';font-weight:600">' + U.fmt(r.valores[m.id], m.unidad) + '</td>';
-          }).join('') +
-          '<td class="num"><div class="bar-cell"><div class="bar-cell__track"><div class="bar-cell__fill" style="width:' +
-            U.clamp((r.puntaje || 0) / maxP * 100, 0, 100).toFixed(0) + '%;background:' + est.color + '"></div></div>' +
-            '<strong>' + (r.puntaje == null ? '—' : U.dec(r.puntaje, 1) + '%') + '</strong></div></td>' +
-          '<td><span class="badge ' + est.clase + '">' + est.etiqueta + '</span></td></tr>';
+      grupos.map(g => {
+        const prom = U.prom(g.filas.map(r => r.puntaje));
+        const cab = '<tr class="row-group"><td colspan="' + nCols + '">' +
+          '<span class="row-group__name">' + U.esc(g.skill) + '</span>' +
+          '<span class="row-group__meta">' + g.filas.length + ' agente' + (g.filas.length === 1 ? '' : 's') +
+          (prom == null ? ' · sin datos' : ' · puntaje promedio ' + U.dec(prom, 1) + '%') + '</span></td></tr>';
+        return cab + g.filas.map((r, i) => {
+          const est = App.estadoCumplimiento(r.puntaje == null ? null : r.puntaje / 100);
+          return '<tr' + (r.sinDatos ? ' style="opacity:.62"' : '') + '>' +
+            '<td class="rank">' + (i + 1) + '</td>' +
+            '<td class="name">' + U.esc(r.agente) + '</td>' +
+            '<td>' + U.esc(r.doc || '—') + '</td>' +
+            '<td class="num">' + (r.dias || '—') + '</td>' +
+            inds.map(m => {
+              const c = App.cumplimiento(r.valores[m.id], m);
+              const col = c == null ? 'var(--ink-muted)' : c >= 1 ? 'var(--ok)' : c >= .9 ? 'var(--warn)' : 'var(--bad)';
+              return '<td class="num" style="color:' + col + ';font-weight:600">' + U.fmt(r.valores[m.id], m.unidad) + '</td>';
+            }).join('') +
+            '<td class="num"><div class="bar-cell"><div class="bar-cell__track"><div class="bar-cell__fill" style="width:' +
+              U.clamp((r.puntaje || 0) / maxP * 100, 0, 100).toFixed(0) + '%;background:' + est.color + '"></div></div>' +
+              '<strong>' + (r.puntaje == null ? '—' : U.dec(r.puntaje, 1) + '%') + '</strong></div></td>' +
+            '<td>' + (r.sinDatos ? '<span class="badge">Sin datos</span>'
+                                 : '<span class="badge ' + est.clase + '">' + est.etiqueta + '</span>') + '</td></tr>';
+        }).join('');
       }).join('') + '</tbody></table>';
   },
 
   exportRanking() {
-    const rank = Rend.ranking(Rend.filtrados());
+    const casilla = document.getElementById('rSinDatos');
+    const rank = Rend.ranking(Rend.filtrados(), !casilla || casilla.checked);
     if (!rank.length) return App.toast('Nada que exportar', '', 'bad');
     const inds = App.indicadoresActivos();
-    const filas = [['Posición', 'Agente', 'Skill', 'Días'].concat(inds.map(m => m.nombre)).concat(['Puntaje global %'])];
-    rank.forEach((r, i) => filas.push([i + 1, r.agente, r.skill, r.dias]
-      .concat(inds.map(m => r.valores[m.id] == null ? '' : String(r.valores[m.id]).replace('.', ',')))
-      .concat([r.puntaje == null ? '' : r.puntaje.toFixed(1).replace('.', ',')])));
-    U.descargar('ranking-' + U.hoy() + '.csv', U.csv(filas), 'text/csv');
+    const filas = [['Skill', 'Agente', 'Documento', 'Días'].concat(inds.map(m => m.nombre)).concat(['Puntaje global %'])];
+    rank.slice().sort((a, b) => (a.skill || '').localeCompare(b.skill || '', 'es') || (b.puntaje || 0) - (a.puntaje || 0))
+      .forEach(r => filas.push([r.skill, r.agente, r.doc, r.dias || '']
+        .concat(inds.map(m => r.valores[m.id] == null ? '' : String(r.valores[m.id]).replace('.', ',')))
+        .concat([r.puntaje == null ? '' : r.puntaje.toFixed(1).replace('.', ',')])));
+    U.descargar('ranking-por-skill-' + U.hoy() + '.csv', U.csv(filas), 'text/csv');
   },
 
   /* ------------------------------ Por skill ------------------------------ */
