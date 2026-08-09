@@ -290,7 +290,7 @@ const Agentes = {
       return;
     }
     const regs = Agentes.registrosDe(nombre);
-    const inds = App.indicadoresActivos();
+    const inds = App.indicadoresConDatos(regs);      // solo los que mide su skill
     if (!regs.length) {
       host.innerHTML = '<div class="empty"><strong>' + U.esc(nombre) + ' no tiene registros en el periodo</strong>Amplía el rango de fechas o carga sus datos.</div>';
       return;
@@ -359,7 +359,7 @@ const Agentes = {
   /* ----------------------------- Comparativa ----------------------------- */
   renderComparar() {
     const inds = App.indicadoresActivos();
-    const ind = App.indicador(document.getElementById('aMetric').value) || inds[0];
+    const ind = App.indicador(document.getElementById('aMetric').value) || App.primerIndicadorConDatos();
     const skillSel = Agentes.skillFiltro();
     const delSkill = new Set(Agentes.agentesDelSkill().map(a => a.nombre));
     const todos = (State.ui.agentesSel || []).filter(n => !skillSel || delSkill.has(n));
@@ -388,15 +388,17 @@ const Agentes = {
         : 'Cada línea es un agente; la línea punteada es la meta de ' + ind.nombre + '.'
     });
 
+    const regsTabla = todos.reduce((a, n) => a.concat(Agentes.registrosDe(n)), []);
+    const indsTabla = App.indicadoresConDatos(regsTabla);
     document.getElementById('aCompareTable').innerHTML =
       '<table class="data"><thead><tr><th class="no-sort">Agente</th><th class="num no-sort">Días</th>' +
-      inds.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') +
+      indsTabla.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') +
       '<th class="num no-sort">Puntaje</th></tr></thead><tbody>' +
       todos.map(n => {
         const regs = Agentes.registrosDe(n);
         const p = App.puntaje(regs);
         return '<tr><td class="name">' + U.esc(n) + '</td><td class="num">' + regs.length + '</td>' +
-          inds.map(m => {
+          indsTabla.map(m => {
             const v = U.prom(regs.map(r => r.valores && r.valores[m.id]));
             const meta = App.metaProm(regs, m);
             const c = App.cumplimiento(v, m, meta);

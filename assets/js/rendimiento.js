@@ -201,7 +201,7 @@ const Rend = {
         '<div class="kpi__foot">' + Rend.deltaHTML(puntaje, puntajePrev, 'up', 'pct') +
         '<span>' + agentes + (enPlantilla > agentes ? ' de ' + enPlantilla : '') + ' agentes · ' + dias + ' días</span></div></div>';
 
-      inds.slice(0, 5).forEach(ind => {
+      App.indicadoresConDatos(regs).slice(0, 5).forEach(ind => {
         const v = U.prom(regs.map(r => r.valores && r.valores[ind.id]));
         const vp = U.prom(prev.map(r => r.valores && r.valores[ind.id]));
         const est = App.estadoCumplimiento(App.cumplimiento(v, ind, App.metaProm(regs, ind)));
@@ -228,9 +228,10 @@ const Rend = {
       });
     }
 
-    /* --- Medidores --- */
-    document.getElementById('rMeters').innerHTML = regs.length
-      ? inds.map(m => Chart.meterHTML(m.nombre, U.prom(regs.map(r => r.valores && r.valores[m.id])), m, App.metaProm(regs, m))).join('')
+    /* --- Medidores: solo los indicadores presentes en el periodo filtrado --- */
+    const indsConDato = App.indicadoresConDatos(regs).filter(m => m.meta != null);
+    document.getElementById('rMeters').innerHTML = indsConDato.length
+      ? indsConDato.map(m => Chart.meterHTML(m.nombre, U.prom(regs.map(r => r.valores && r.valores[m.id])), m, App.metaProm(regs, m))).join('')
       : '<div class="empty">Sin datos en el periodo</div>';
 
     /* --- Top / Bottom --- */
@@ -324,26 +325,36 @@ const Rend = {
       (rank.length - conDatos ? ' · ' + (rank.length - conDatos) + ' sin datos aún' : '');
 
     const maxP = Math.max(...rank.map(r => r.puntaje || 0), 100);
-    const nCols = 5 + inds.length + 2;
 
-    host.innerHTML = Rend.avisoFiltro() + '<table class="data"><thead><tr>' +
-      '<th class="no-sort">#</th><th class="no-sort">Agente</th><th class="no-sort">Documento</th><th class="num no-sort">Días</th>' +
-      inds.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') +
-      '<th class="num no-sort">Puntaje global</th><th class="no-sort">Estado</th></tr></thead><tbody>' +
-      grupos.map(g => {
-        const prom = U.prom(g.filas.map(r => r.puntaje));
-        const cab = '<tr class="row-group"><td colspan="' + nCols + '">' +
-          '<span class="row-group__name">' + U.esc(g.skill) + '</span>' +
-          '<span class="row-group__meta">' + g.filas.length + ' agente' + (g.filas.length === 1 ? '' : 's') +
-          (prom == null ? ' · sin datos' : ' · puntaje promedio ' + U.dec(prom, 1) + '%') + '</span></td></tr>';
-        return cab + g.filas.map((r, i) => {
+    /* Una tabla por skill: cada uno mide indicadores distintos, así que ponerlos
+       todos como columnas dejaría la mayoría vacías. Cada tabla lleva solo las
+       columnas que ese skill usa. */
+    host.innerHTML = Rend.avisoFiltro() + grupos.map(g => {
+      const prom = U.prom(g.filas.map(r => r.puntaje));
+      const regsGrupo = Rend.filtrados().filter(r => (r.skill || App.skillDeAgente(r.agente) || 'Sin skill') === g.skill);
+      const cols = App.indicadoresConDatos(regsGrupo);
+      const usar = cols.length ? cols : inds;
+
+      return '<div class="grupo-tabla">' +
+        '<div class="group-head" style="border-radius:0;border-left:0;border-right:0">' +
+          '<span class="group-head__dot"></span>' +
+          '<span class="group-head__name">' + U.esc(g.skill) + '</span>' +
+          '<span class="group-head__meta">' + g.filas.length + ' agente' + (g.filas.length === 1 ? '' : 's') +
+          ' · ' + usar.length + ' indicadores' +
+          (prom == null ? ' · sin datos' : ' · puntaje promedio ' + U.dec(prom, 1) + '%') + '</span>' +
+        '</div>' +
+        '<div class="table-wrap" style="border:0;border-radius:0">' +
+        '<table class="data"><thead><tr>' +
+          '<th class="no-sort">#</th><th class="no-sort">Agente</th><th class="no-sort">Documento</th>' +
+          usar.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') +
+          '<th class="num no-sort">Puntaje</th><th class="no-sort">Estado</th></tr></thead><tbody>' +
+        g.filas.map((r, i) => {
           const est = App.estadoCumplimiento(r.puntaje == null ? null : r.puntaje / 100);
           return '<tr' + (r.sinDatos ? ' style="opacity:.62"' : '') + '>' +
             '<td class="rank">' + (i + 1) + '</td>' +
             '<td class="name">' + U.esc(r.agente) + '</td>' +
             '<td>' + U.esc(r.doc || '—') + '</td>' +
-            '<td class="num">' + (r.dias || '—') + '</td>' +
-            inds.map(m => {
+            usar.map(m => {
               const c = App.cumplimiento(r.valores[m.id], m, r.metas[m.id]);
               const col = c == null ? 'var(--ink-muted)' : c >= 1 ? 'var(--ok)' : c >= .9 ? 'var(--warn)' : 'var(--bad)';
               return '<td class="num" style="color:' + col + ';font-weight:600" title="Meta ' + U.fmt(r.metas[m.id], m.unidad) + '">' +
@@ -354,8 +365,9 @@ const Rend = {
               '<strong>' + (r.puntaje == null ? '—' : U.dec(r.puntaje, 1) + '%') + '</strong></div></td>' +
             '<td>' + (r.sinDatos ? '<span class="badge">Sin datos</span>'
                                  : '<span class="badge ' + est.clase + '">' + est.etiqueta + '</span>') + '</td></tr>';
-        }).join('');
-      }).join('') + '</tbody></table>';
+        }).join('') +
+        '</tbody></table></div></div>';
+    }).join('');
   },
 
   exportRanking() {
@@ -410,14 +422,15 @@ const Rend = {
       formatX: (f, largo) => largo ? U.fechaLarga(f) : U.fechaCorta(f), tituloX: 'Fecha'
     });
 
+    const indsResumen = App.indicadoresConDatos(regs);
     document.getElementById('rSkillTable').innerHTML =
       '<table class="data"><thead><tr><th class="no-sort">Skill</th><th class="num no-sort">Agentes</th><th class="num no-sort">Registros</th>' +
-      inds.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') + '<th class="num no-sort">Puntaje</th></tr></thead><tbody>' +
+      indsResumen.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') + '<th class="num no-sort">Puntaje</th></tr></thead><tbody>' +
       skills.map(s => {
         const rs = regs.filter(r => (r.skill || 'Sin skill') === s);
         const p = App.puntaje(rs);
         return '<tr><td class="name">' + U.esc(s) + '</td><td class="num">' + new Set(rs.map(r => r.agente)).size + '</td><td class="num">' + rs.length + '</td>' +
-          inds.map(m => '<td class="num">' + U.fmt(U.prom(rs.map(r => r.valores && r.valores[m.id])), m.unidad) + '</td>').join('') +
+          indsResumen.map(m => '<td class="num">' + U.fmt(U.prom(rs.map(r => r.valores && r.valores[m.id])), m.unidad) + '</td>').join('') +
           '<td class="num"><strong>' + (p == null ? '—' : U.dec(p, 1) + '%') + '</strong></td></tr>';
       }).join('') + '</tbody></table>';
   },
@@ -425,7 +438,7 @@ const Rend = {
   /* ------------------------- Detalle de registros ------------------------ */
   renderDatos() {
     const regs = Rend.filtrados().slice().sort((a, b) => b.fecha.localeCompare(a.fecha) || a.agente.localeCompare(b.agente, 'es'));
-    const inds = App.indicadoresActivos();
+    const inds = App.indicadoresConDatos(regs);      // solo las columnas que este filtro usa
     const host = document.getElementById('rDataTable');
     document.getElementById('rDatosSub').textContent = regs.length + ' registros · haz doble clic en un valor para corregirlo';
 

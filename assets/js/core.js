@@ -610,6 +610,16 @@ const App = {
   /** ¿Este indicador tiene algún valor cargado? */
   tieneDatos(id) { return State.registros.some(r => r.valores && r.valores[id] != null); },
 
+  /**
+   * Indicadores que aparecen en ese conjunto de registros. Cada skill mide cosas
+   * distintas (INB tiene AHT y FCR, RRSS tiene TMR…), así que las tablas solo
+   * deben mostrar las columnas que ese grupo realmente usa.
+   */
+  indicadoresConDatos(registros) {
+    return App.indicadoresActivos().filter(m =>
+      registros.some(r => r.valores && r.valores[m.id] != null));
+  },
+
   /** El primero que sí tenga datos: evita que los gráficos arranquen en blanco. */
   primerIndicadorConDatos() {
     const act = App.indicadoresActivos();
