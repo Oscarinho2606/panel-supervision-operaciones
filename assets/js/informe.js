@@ -71,7 +71,8 @@ const Informe = {
       mes: buscar(/^(mes|month)$/),
       fecha: buscar(/^(fecha|periodo|corte)$/),
       performance: buscar(/^(performance|desempeno|nivel)$/),
-      peso: buscar(/^(peso)$/)
+      // "Peso" o "Peso General Chat": es el puntaje total que ya calcula el informe
+      peso: buscar(/^peso/)
     };
     if (cols.nombre < 0 && cols.cedula < 0) return null;
 
@@ -481,6 +482,11 @@ const Informe = {
       reg.valores = Object.assign({}, reg.valores, valores);
       reg.metas = Object.assign({}, reg.metas, metas);
       if (an.cols.performance >= 0) reg.performance = String(f[an.cols.performance] == null ? '' : f[an.cols.performance]).trim();
+      // Puntaje que ya trae calculado el informe (la suma de las columnas «Cumple»)
+      if (an.cols.peso >= 0) {
+        const p = Informe.valor(f[an.cols.peso], { unidad: 'pct' });
+        if (p != null) reg.pesoInforme = p;
+      }
       if (!previo) State.registros.push(reg);
       agentes++;
     });

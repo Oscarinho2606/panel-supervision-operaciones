@@ -463,7 +463,7 @@ const Chart = {
       '<div class="meter__top"><span class="meter__name">' + U.esc(nombre) + '</span>' +
         '<span class="meter__val">' + U.fmt(valor, ind.unidad) + ' <span class="badge ' + est.clase + '">' + est.etiqueta + '</span></span></div>' +
       '<div class="meter__track"><div class="meter__fill" style="width:' + pct.toFixed(1) + '%;background:' + relleno + '"></div>' +
-        '<div class="meter__goal" style="left:' + (c == null ? 100 : U.clamp(100 / Math.max(c, 1), 0, 100)).toFixed(1) + '%"></div></div>' +
+        '<div class="meter__goal" style="left:100%"></div></div>' +
       '<div class="meter__foot"><span>Meta: ' + U.fmt(m, ind.unidad) + (ind.direccion === 'down' ? ' o menos' : ' o más') + '</span>' +
         '<span>' + (c == null ? 'Sin dato' : U.dec(c * 100, 0) + ' % de cumplimiento') + '</span></div>' +
       '</div>';

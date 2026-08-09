@@ -280,7 +280,8 @@ const Rend = {
         doc: (rs.find(r => r.doc) || {}).doc || '',
         dias: new Set(rs.map(r => r.fecha)).size,
         skill: (rs.length && rs[rs.length - 1].skill) || App.skillDeAgente(agente),
-        valores: {}, metas: {}, sinDatos: !rs.length
+        valores: {}, metas: {}, sinDatos: !rs.length,
+        pesoInforme: U.prom(rs.map(r => r.pesoInforme))
       };
       App.indicadoresActivos().forEach(m => {
         fila.valores[m.id] = U.prom(rs.map(r => r.valores && r.valores[m.id]));
@@ -324,8 +325,6 @@ const Rend = {
       conDatos + ' con indicadores cargados' +
       (rank.length - conDatos ? ' · ' + (rank.length - conDatos) + ' sin datos aún' : '');
 
-    const maxP = Math.max(...rank.map(r => r.puntaje || 0), 100);
-
     /* Una tabla por skill: cada uno mide indicadores distintos, así que ponerlos
        todos como columnas dejaría la mayoría vacías. Cada tabla lleva solo las
        columnas que ese skill usa. */
@@ -334,6 +333,7 @@ const Rend = {
       const regsGrupo = Rend.filtrados().filter(r => (r.skill || App.skillDeAgente(r.agente) || 'Sin skill') === g.skill);
       const cols = App.indicadoresConDatos(regsGrupo);
       const usar = cols.length ? cols : inds;
+      const hayPeso = g.filas.some(r => r.pesoInforme != null);
 
       return '<div class="grupo-tabla">' +
         '<div class="group-head" style="border-radius:0;border-left:0;border-right:0">' +
@@ -347,6 +347,7 @@ const Rend = {
         '<table class="data"><thead><tr>' +
           '<th class="no-sort">#</th><th class="no-sort">Agente</th><th class="no-sort">Documento</th>' +
           usar.map(m => '<th class="num no-sort">' + U.esc(m.nombre) + '</th>').join('') +
+          (hayPeso ? '<th class="num no-sort" title="Puntaje que trae calculado el informe">Peso informe</th>' : '') +
           '<th class="num no-sort">Puntaje</th><th class="no-sort">Estado</th></tr></thead><tbody>' +
         g.filas.map((r, i) => {
           const est = App.estadoCumplimiento(r.puntaje == null ? null : r.puntaje / 100);
@@ -360,8 +361,9 @@ const Rend = {
               return '<td class="num" style="color:' + col + ';font-weight:600" title="Meta ' + U.fmt(r.metas[m.id], m.unidad) + '">' +
                 U.fmt(r.valores[m.id], m.unidad) + '</td>';
             }).join('') +
+            (hayPeso ? '<td class="num">' + (r.pesoInforme == null ? '—' : U.dec(r.pesoInforme, 1) + '%') + '</td>' : '') +
             '<td class="num"><div class="bar-cell"><div class="bar-cell__track"><div class="bar-cell__fill" style="width:' +
-              U.clamp((r.puntaje || 0) / maxP * 100, 0, 100).toFixed(0) + '%;background:' + est.color + '"></div></div>' +
+              U.clamp(r.puntaje || 0, 0, 100).toFixed(0) + '%;background:' + est.color + '"></div></div>' +
               '<strong>' + (r.puntaje == null ? '—' : U.dec(r.puntaje, 1) + '%') + '</strong></div></td>' +
             '<td>' + (r.sinDatos ? '<span class="badge">Sin datos</span>'
                                  : '<span class="badge ' + est.clase + '">' + est.etiqueta + '</span>') + '</td></tr>';

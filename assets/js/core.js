@@ -626,19 +626,23 @@ const App = {
     return act.find(m => m.meta != null && App.tieneDatos(m.id)) || act.find(m => App.tieneDatos(m.id)) || act[0] || null;
   },
 
-  /** Cumplimiento 0..1.5 de un valor contra la meta del indicador. */
+  /**
+   * Cumplimiento de un valor contra su meta, de 0 a 1.
+   * Se tope en 1: superar la meta cuenta como cumplida, no aporta de más. Así el
+   * puntaje global nunca pasa del 100 %, igual que en el informe de la campaña.
+   */
   cumplimiento(valor, ind, meta) {
     const m = meta == null ? (ind && ind.meta) : meta;
     if (valor == null || !isFinite(valor) || !ind || m == null || !isFinite(m)) return null;
     // Meta cero: es un "no debe haber ninguno" (errores, ausentismo). Se cumple o no.
     if (m === 0) {
       if (ind.direccion === 'down') return valor <= 0 ? 1 : 0;
-      return valor > 0 ? 1.5 : 0;
+      return valor > 0 ? 1 : 0;
     }
     const r = ind.direccion === 'down'
-      ? (valor <= 0 ? 1.5 : m / valor)
+      ? (valor <= 0 ? 1 : m / valor)
       : valor / m;
-    return U.clamp(r, 0, 1.5);
+    return U.clamp(r, 0, 1);
   },
 
   /** Meta de un indicador para un registro concreto: manda la que trae el informe. */
@@ -659,7 +663,7 @@ const App = {
     return { clase: 'badge--bad', etiqueta: 'Bajo', color: 'var(--bad)' };
   },
 
-  /** Puntaje global ponderado (0..150) de un conjunto de registros. */
+  /** Puntaje global ponderado de 0 a 100 de un conjunto de registros. */
   puntaje(registros) {
     const inds = App.indicadoresActivos();
     let suma = 0, pesos = 0;
