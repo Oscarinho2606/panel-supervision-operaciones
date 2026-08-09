@@ -563,7 +563,35 @@ table.preview th { background: var(--surface-3); position: sticky; top: 0; font-
 .toast strong { display: block; margin-bottom: 2px; }
 @keyframes slide { from { opacity: 0; transform: translateX(22px); } to { opacity: 1; transform: none; } }
 
-/* --------------------------- 16. Impresión ------------------------------- */
+/* --------------------------- 16. Acceso ---------------------------------- */
+.login {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px;
+  background: linear-gradient(135deg, var(--brand-700) 0%, var(--brand-600) 45%, var(--blue-700) 100%);
+}
+.login[hidden] { display: none; }
+.login__caja {
+  width: min(400px, 100%); background: var(--surface); border-radius: var(--r-xl);
+  box-shadow: var(--shadow-3); padding: 32px 30px 26px; text-align: center;
+}
+.login__marca { margin-bottom: 14px; }
+.login__titulo { font-size: 20px; margin-bottom: 4px; }
+.login__sub { font-size: 13px; color: var(--ink-muted); margin-bottom: 20px; }
+.login__caja .field { text-align: left; margin-bottom: 14px; }
+.login__error {
+  background: var(--bad-soft); color: var(--bad); font-size: 13px; font-weight: 600;
+  border-radius: 9px; padding: 9px 12px; margin-bottom: 12px;
+}
+.login__error[hidden] { display: none; }
+.login__pie { font-size: 11.5px; color: var(--ink-muted); margin-top: 16px; line-height: 1.5; }
+
+/* Modo solo consulta: se esconde todo lo que modifica información */
+body.rol-consulta [data-editor] { display: none !important; }
+.pill-rol {
+  font-size: 11px; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  background: rgba(255,255,255,.14); color: rgba(255,255,255,.92); border: 1px solid rgba(255,255,255,.18);
+}
+
+/* --------------------------- 17. Impresión ------------------------------- */
 @media print {
   .app-bar, .subnav, .filterbar, .card__tools, .toasts, .picker { display: none !important; }
   body { background: #fff; }

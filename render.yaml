@@ -1,0 +1,26 @@
+# Despliegue en Render. Al conectar el repositorio, Render lee este archivo
+# y crea el servicio con estos ajustes; solo hay que rellenar los valores
+# marcados como sync:false en el panel de Render.
+services:
+  - type: web
+    name: panel-supervision-operaciones
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: servidor
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/sesion
+    envVars:
+      # Cadena de conexión de Supabase (Connection pooling, modo Session)
+      - key: DATABASE_URL
+        sync: false
+      # Contraseña de quien carga y modifica
+      - key: CLAVE_EDITOR
+        sync: false
+      # Contraseña de quien solo consulta
+      - key: CLAVE_CONSULTA
+        sync: false
+      # Cadena larga y aleatoria: mantiene las sesiones al reiniciar el servicio
+      - key: SECRETO_SESION
+        generateValue: true

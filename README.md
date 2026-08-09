@@ -8,9 +8,18 @@ información se guarda localmente: nada viaja a internet ni a ningún servidor.
 
 ---
 
-## Dos formas de usarlo
+## Tres formas de usarlo
 
-### 1. Compartido con el equipo (recomendado)
+### 1. Publicado en internet — una dirección para todos
+
+Alojado en **Render** con la base de datos en **Supabase**: una dirección fija que
+funciona desde cualquier lugar, aunque tu equipo esté apagado. Entras con
+contraseña y hay dos perfiles: **editor** (carga y modifica) y **consulta** (solo
+mira, sin poder tocar nada).
+
+Los pasos están en **[DESPLIEGUE.md](DESPLIEGUE.md)**.
+
+### 2. Compartido en la red de la oficina
 
 Con el servidor encendido, la información se guarda en **PostgreSQL** y todos
 los que abran la dirección desde la red ven exactamente lo mismo.
@@ -38,7 +47,7 @@ netsh advfirewall firewall add rule name="Panel Operaciones" dir=in action=allow
 Requisitos: PostgreSQL y Node.js instalados en el equipo que hace de servidor.
 La base se crea con `servidor/esquema.sql`.
 
-### 2. Solo en tu equipo
+### 3. Solo en tu equipo
 
 Abriendo `index.html` directamente, o desde el enlace publicado en GitHub Pages.
 Todo queda en el navegador de ese equipo y **no lo ve nadie más**. Sirve para

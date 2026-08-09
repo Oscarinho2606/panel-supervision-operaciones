@@ -388,9 +388,68 @@ const State = {
 const App = {
   listo: false,
 
+  rol: 'editor',        // sin servidor, quien abre el panel manda sobre sus datos
+
+  /* --------------------------- Acceso ------------------------------------ */
+  /** Con servidor, hay que entrar con contraseña antes de ver nada. */
+  async pedirAcceso() {
+    try {
+      const r = await fetch('api/sesion', { cache: 'no-store' });
+      const s = await r.json();
+      if (s.autenticado) { App.rol = s.rol; return true; }
+    } catch (e) { /* sin servidor no hay acceso que pedir */ }
+    document.getElementById('login').hidden = false;
+    return false;
+  },
+
+  async entrar(ev) {
+    ev.preventDefault();
+    const clave = document.getElementById('loginClave').value;
+    const error = document.getElementById('loginError');
+    error.hidden = true;
+    try {
+      const r = await fetch('api/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clave: clave })
+      });
+      const res = await r.json();
+      if (!r.ok) { error.textContent = res.error || 'No se pudo entrar'; error.hidden = false; return; }
+      document.getElementById('login').hidden = true;
+      location.reload();
+    } catch (e) {
+      error.textContent = 'No se pudo conectar con el servidor'; error.hidden = false;
+    }
+  },
+
+  async salir() {
+    await fetch('api/salir', { method: 'POST' });
+    location.reload();
+  },
+
+  /** Deja el panel en modo consulta: se ocultan las acciones que modifican. */
+  aplicarRol() {
+    document.body.classList.toggle('rol-consulta', App.rol !== 'editor');
+    if (Store.modo !== 'servidor') return;
+    const acciones = document.querySelector('.app-bar__actions');
+    if (acciones && !document.getElementById('pillRol')) {
+      acciones.insertAdjacentHTML('afterbegin',
+        '<span class="pill-rol" id="pillRol">' +
+        (App.rol === 'editor' ? '✎ Puedes cargar' : '👁 Solo consulta') + '</span>' +
+        '<button class="btn btn--ghost" type="button" onclick="App.salir()" title="Cerrar la sesión">Salir</button>');
+    }
+    // En modo consulta, la pestaña activa puede ser una que ya no se ve
+    if (App.rol !== 'editor') {
+      for (const vista in State.ui.tabs) {
+        const btn = document.querySelector('#view-' + vista + ' .tab-btn[data-tab="' + State.ui.tabs[vista] + '"]');
+        if (btn && btn.hasAttribute('data-editor')) delete State.ui.tabs[vista];
+      }
+    }
+  },
+
   async init() {
     document.body.classList.add('sin-animacion');
     const modo = await Store.abrir();
+    if (modo === 'servidor' && !(await App.pedirAcceso())) return;
     const guardado = await Store.get('kv', 'state');
     if (guardado) {
       Object.assign(State, guardado);
@@ -399,6 +458,7 @@ const App = {
     }
     App.aplicarTema(State.meta.tema);
     App.pintarIdentidad();
+    App.aplicarRol();
 
     const pill = document.getElementById('storagePill');
     pill.textContent = modo === 'servidor' ? '🗄 Compartido en la base de datos'
