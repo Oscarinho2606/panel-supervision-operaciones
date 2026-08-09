@@ -30,6 +30,24 @@ const Informe = {
   esMeta(h) { return /^meta|(^|[^a-z])meta([^a-z]|$)/.test(U.norm(h)); },
   esCumple(h) { return /cumple/.test(U.norm(h)); },
 
+  /** Columnas que no son indicadores aunque lleven números. */
+  esAuxiliar(h) { return /^(peso|performance|mes|ano|anio|cedula|documento|nombre)/.test(U.norm(h)); },
+
+  /** Nombre del indicador que se deduce de su columna de meta. */
+  nombreDesdeMeta(h) {
+    return String(h).replace(/meta/ig, '').replace(/[_\s]+/g, ' ').replace(/^[\s:_-]+|[\s:_-]+$/g, '').trim();
+  },
+
+  /** Parecido entre dos nombres de columna, ignorando el prefijo «Cumple». */
+  similitud(a, b) {
+    const pal = s => U.norm(s).replace(/^cumple\s*/, '').split(' ').filter(w => w.length > 2);
+    const pa = pal(a), pb = pal(b);
+    if (!pa.length || !pb.length) return 0;
+    let comunes = 0;
+    pa.forEach(w => { if (pb.some(x => x === w || x.indexOf(w) === 0 || w.indexOf(x) === 0)) comunes++; });
+    return comunes / Math.max(pa.length, pb.length);
+  },
+
   /**
    * Analiza una hoja y devuelve su estructura, o null si no tiene este formato.
    * La fila de encabezados es la que trae al menos dos columnas «Cumple».
@@ -57,19 +75,40 @@ const Informe = {
     };
     if (cols.nombre < 0 && cols.cedula < 0) return null;
 
-    // Tripletas: las dos columnas anteriores a cada «Cumple» son el valor y la meta
+    /* Cada indicador es un grupo de tres columnas que termina en «Cumple».
+       El orden varía entre hojas —a veces la meta va antes del resultado y a
+       veces después—, así que se parte de la columna de meta y se comprueba
+       dónde cae el «Cumple»:
+           A)  [resultado] [meta] [Cumple]
+           B)  [meta] [resultado] [Cumple]
+       Si ambas encajan, gana la que tenga el nombre más parecido al de la meta;
+       eso resuelve las hojas donde la columna del resultado está mal rotulada. */
     const usadas = new Set(Object.values(cols).filter(i => i >= 0));
     const indicadores = [];
     H.forEach((h, j) => {
-      if (!h || !Informe.esCumple(h)) return;
-      const a = j - 2, b = j - 1;
-      if (a < 0 || !H[a] || !H[b]) return;
-      const aEsMeta = Informe.esMeta(H[a]), bEsMeta = Informe.esMeta(H[b]);
-      if (aEsMeta === bEsMeta) return;                       // ambas o ninguna: no es una tripleta
-      const colMeta = aEsMeta ? a : b;
-      const colValor = aEsMeta ? b : a;
-      indicadores.push({ nombre: H[colValor].replace(/\s+/g, ' ').trim(), colValor: colValor, colMeta: colMeta, colCumple: j });
-      usadas.add(a); usadas.add(b); usadas.add(j);
+      if (!h || !Informe.esMeta(h) || Informe.esCumple(h)) return;
+      const base = Informe.nombreDesdeMeta(h);
+      const opciones = [];
+      if (j - 1 >= 0 && H[j - 1] && H[j + 1] && Informe.esCumple(H[j + 1]) &&
+          !Informe.esMeta(H[j - 1]) && !Informe.esAuxiliar(H[j - 1])) {
+        opciones.push({ valor: j - 1, cumple: j + 1 });
+      }
+      if (H[j + 1] && H[j + 2] && Informe.esCumple(H[j + 2]) && !Informe.esMeta(H[j + 1])) {
+        opciones.push({ valor: j + 1, cumple: j + 2 });
+      }
+      const libres = opciones.filter(o => !usadas.has(o.valor));
+      if (!libres.length) return;
+
+      const elegida = libres.length === 1 ? libres[0]
+        : libres.map(o => ({ o: o, s: Informe.similitud(base, H[o.valor]) }))
+                .sort((x, y) => y.s - x.s)[0].o;
+
+      // Si la columna del resultado se llama «Cumple…», el nombre bueno es el de la meta
+      const bruto = String(H[elegida.valor]).replace(/\s+/g, ' ').trim();
+      const nombre = Informe.esCumple(bruto) || !bruto ? base : bruto;
+
+      indicadores.push({ nombre: nombre, colValor: elegida.valor, colMeta: j, colCumple: elegida.cumple });
+      usadas.add(elegida.valor); usadas.add(j); usadas.add(elegida.cumple);
     });
     if (!indicadores.length) return null;
 
@@ -82,7 +121,7 @@ const Informe = {
 
     // Columnas sueltas con datos numéricos: se ofrecen como indicadores sin meta
     H.forEach((h, j) => {
-      if (!h || usadas.has(j) || Informe.esMeta(h) || Informe.esCumple(h)) return;
+      if (!h || usadas.has(j) || Informe.esMeta(h) || Informe.esCumple(h) || Informe.esAuxiliar(h)) return;
       const conNumero = datos.filter(f => U.num(f[j]) != null).length;
       if (conNumero >= datos.length * 0.5) {
         indicadores.push({ nombre: h.replace(/\s+/g, ' ').trim(), colValor: j, colMeta: -1, colCumple: -1 });
@@ -115,17 +154,27 @@ const Informe = {
 
   /** Unidad y dirección deducidas del nombre y de los propios valores. */
   perfil(nombre, muestra) {
+    const crudo = String(nombre);                     // el símbolo % se pierde al normalizar
     const n = U.norm(nombre);
-    const textos = muestra.map(v => String(v == null ? '' : v));
+    const textos = muestra.map(v => String(v == null ? '' : v)).filter(t => t.trim() !== '');
     const conPct = textos.filter(t => t.indexOf('%') > -1).length;
-    const hayPct = conPct >= Math.max(1, textos.filter(t => t.trim() !== '').length * 0.5);
+    const hayPct = conPct >= Math.max(1, textos.length * 0.5);
+
+    // Valores todos entre -1 y 1: es una proporción escrita como fracción.
+    // Se admite el signo porque indicadores como el NPS pueden ser negativos.
+    const nums = textos.map(t => U.num(t)).filter(v => v != null);
+    const sonFracciones = nums.length >= 3 && nums.every(v => Math.abs(v) <= 1) && nums.some(v => v !== 0);
+
+    const pareceRatio = /nota|calidad|adh\b|abs\b|tipificado|encuesta|conocim|conoci|fcr|nps|desconex|cumplimi|efectiv|conversion|satisfa|adheren|ausent|productiv/.test(n);
 
     let unidad = 'num';
-    if (/\baht\b|\btmo\b|tiempo|duracion|hold|acw/.test(n)) unidad = 'seg';
-    else if (hayPct || /^%|\bpct\b|porcentaje|nota|calidad|adh|abs|tipificado|encuesta|conocimiento|fcr|nps/.test(n)) unidad = 'pct';
+    if (/\btmr\b.*minuto|minuto/.test(n)) unidad = 'min';
+    else if (/\baht\b|\btmo\b|\btmr\b|tiempo|duracion|hold|acw/.test(n)) unidad = 'seg';
+    else if (hayPct || crudo.indexOf('%') > -1 || /\bpct\b|porcentaje/.test(n)) unidad = 'pct';
+    else if (pareceRatio && (sonFracciones || nums.every(v => Math.abs(v) <= 100))) unidad = 'pct';
 
     // Menor es mejor en errores, tiempos, ausentismo y desconexiones
-    const menorEsMejor = /error|mal |aht|tmo|abs\b|ausent|desconex|abandono|reproces|queja|escalad|radicados|reclamo/.test(n);
+    const menorEsMejor = /error|mal |aht|tmo|tmr|abs\b|ausent|desconex|abandono|reproces|queja|escalad|radicados|reclamo/.test(n);
     return { unidad: unidad, direccion: menorEsMejor ? 'down' : 'up' };
   },
 
@@ -136,7 +185,7 @@ const Informe = {
     if (v == null) return null;
     const texto = String(bruto);
     // 0,92 en una columna de porcentaje viene como fracción
-    if (ind.unidad === 'pct' && texto.indexOf('%') < 0 && v > 0 && v <= 1) v = v * 100;
+    if (ind.unidad === 'pct' && texto.indexOf('%') < 0 && v !== 0 && Math.abs(v) <= 1) v = v * 100;
     return v;
   },
 
