@@ -591,8 +591,17 @@
 <!-- ================================================================== -->
 <section class="view" id="view-ajustes">
   <div class="grid grid--2">
+    <div class="card" id="ajServidorCard" hidden>
+      <div class="card__head"><div><h3 class="card__title">Base de datos compartida</h3>
+        <p class="card__sub">La información se guarda en PostgreSQL: todos los que abran esta dirección ven lo mismo.</p></div></div>
+      <div class="table-wrap" id="ajServidor"></div>
+      <div class="stack">
+        <button class="btn btn--ghost btn--sm" type="button" onclick="App.copiarDireccion()">Copiar la dirección para el equipo</button>
+      </div>
+    </div>
+
     <div class="card">
-      <div class="card__head"><div><h3 class="card__title">Respaldo de la información</h3><p class="card__sub">Todo se guarda en este equipo. Exporta con frecuencia o para pasar el panel a otro computador.</p></div></div>
+      <div class="card__head"><div><h3 class="card__title">Respaldo de la información</h3><p class="card__sub">Guarda una copia del contenido completo, para archivarlo o llevarlo a otro equipo.</p></div></div>
       <div class="stack stack--col">
         <button class="btn btn--primary" type="button" onclick="App.exportarRespaldo()">Descargar respaldo completo (.json)</button>
         <button class="btn btn--ghost" type="button" onclick="document.getElementById('fileBackup').click()">Restaurar desde respaldo</button>

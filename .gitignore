@@ -15,10 +15,15 @@ backup-*.json
 # Documentos de la base de conocimiento
 *.pdf
 
+# Dependencias del servidor
+node_modules/
+servidor/node_modules/
+package-lock.json
+servidor/package-lock.json
+
 # Sistema y editores
 Thumbs.db
 desktop.ini
 .DS_Store
 .vscode/
 .idea/
-node_modules/

@@ -8,14 +8,52 @@ información se guarda localmente: nada viaja a internet ni a ningún servidor.
 
 ---
 
-## Cómo se usa
+## Dos formas de usarlo
 
-1. Abre el enlace del panel (o el archivo `index.html` si trabajas sin conexión).
-2. En **Ajustes → Cargar datos de ejemplo** puedes ver cómo funciona antes de subir información real.
-3. Cuando quieras empezar de cero: **Ajustes → Borrar toda la información**.
+### 1. Compartido con el equipo (recomendado)
 
-> Como todo se guarda en el navegador, usa **Ajustes → Descargar respaldo completo**
-> con frecuencia y para pasar el panel a otro computador.
+Con el servidor encendido, la información se guarda en **PostgreSQL** y todos
+los que abran la dirección desde la red ven exactamente lo mismo.
+
+```
+Doble clic en  "Iniciar panel.bat"
+```
+
+La ventana que se abre indica dos direcciones:
+
+- `http://localhost:3000` → para ti, en este equipo
+- `http://<tu-ip>:3000` → la que le pasas a tu equipo
+
+Deja esa ventana abierta mientras los demás consulten. Cuando cargues un informe,
+a los que tengan el panel abierto les aparece un aviso de «hay información nueva»
+con un botón para actualizar.
+
+**La primera vez**, permite el puerto en el firewall de Windows (una sola vez,
+en PowerShell **como administrador**):
+
+```powershell
+netsh advfirewall firewall add rule name="Panel Operaciones" dir=in action=allow protocol=TCP localport=3000
+```
+
+Requisitos: PostgreSQL y Node.js instalados en el equipo que hace de servidor.
+La base se crea con `servidor/esquema.sql`.
+
+### 2. Solo en tu equipo
+
+Abriendo `index.html` directamente, o desde el enlace publicado en GitHub Pages.
+Todo queda en el navegador de ese equipo y **no lo ve nadie más**. Sirve para
+consultar sin depender del servidor, o para trabajar desde casa.
+
+En cualquiera de los dos modos, la etiqueta de la barra superior indica dónde se
+está guardando la información.
+
+---
+
+## Primeros pasos
+
+1. En **Ajustes → Cargar datos de ejemplo** puedes ver cómo funciona antes de subir información real.
+2. Cuando quieras empezar de cero: **Ajustes → Borrar toda la información**.
+3. **Ajustes → Descargar respaldo completo** guarda una copia de todo en un archivo.
 
 ---
 
@@ -162,16 +200,44 @@ tiempos como `05:30`, `00:05:30` o en segundos.
 
 ```
 index.html
+Iniciar panel.bat        arranca el servidor compartido
 assets/
   css/styles.css
-  js/core.js            estado, almacenamiento, navegación, utilidades
-     sheets.js          lector de Excel/CSV y mapeador de columnas
-     charts.js          gráficos SVG
-     rendimiento.js     indicadores del equipo
-     agentes.js         seguimiento individual
-     turnos.js          mallas y cobertura
-     conocimientos.js   procesos y PDF
-     demo.js            datos de ejemplo
+  js/core.js             estado, almacenamiento, navegación, utilidades
+     sheets.js           lector de Excel/CSV y mapeador de columnas
+     informe.js          lectura del informe de operaciones con metas
+     charts.js           gráficos SVG
+     rendimiento.js      indicadores del equipo
+     agentes.js          seguimiento individual
+     turnos.js           mallas y cobertura
+     conocimientos.js    procesos y PDF
+     demo.js             datos de ejemplo
+servidor/
+  server.js              servidor HTTP + API sobre PostgreSQL
+  esquema.sql            tablas y vistas de la base de datos
+```
+
+### La base de datos
+
+Todo el contenido del panel se guarda como `jsonb` en la tabla `estado`, y los
+PDF en `archivos`. Cada guardado deja una copia en `historial` (se conservan las
+50 últimas). Para no pisar el trabajo de otro, quien guarda envía la versión que
+tenía: si alguien se le adelantó, recibe un aviso en lugar de sobrescribir.
+
+Aunque el contenido viaje en JSON, hay **vistas SQL** para consultarlo con
+consultas normales:
+
+| Vista | Qué devuelve |
+|---|---|
+| `v_indicadores` | Los indicadores con su meta, unidad, dirección y peso |
+| `v_resultados` | Una fila por agente e indicador, con su valor y su meta |
+| `v_resultados_detalle` | Lo anterior más el nombre del indicador y el % de cumplimiento |
+| `v_puntajes` | Puntaje por agente, ya ponderado |
+| `v_turnos` | La malla, con las horas de cada turno |
+
+```sql
+-- Los agentes de INB por debajo del 90 %
+SELECT agente, puntaje FROM v_puntajes WHERE skill = 'INB' AND puntaje < 90 ORDER BY puntaje;
 ```
 
 ## Privacidad
@@ -179,3 +245,8 @@ assets/
 Este repositorio contiene **solo el código**. Las mallas, los reportes de
 indicadores y los PDF nunca se suben: el `.gitignore` bloquea `.xlsx`, `.csv`,
 `.pdf` y los respaldos para evitar publicar datos personales por accidente.
+
+La base de datos vive únicamente en el equipo que hace de servidor, y solo es
+accesible desde la red interna. **No la expongas a internet**: el panel no tiene
+usuarios ni contraseñas, así que cualquiera con acceso a la red y a la dirección
+puede ver y modificar la información.

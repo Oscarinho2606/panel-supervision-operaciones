@@ -213,8 +213,25 @@ const U = {
    navegador bloquea IndexedDB (ocurre al abrir con doble clic en algunos casos). */
 const Store = {
   db: null, modo: 'memoria', mem: {},
+  version: 0,            // versión del estado en el servidor, para no pisar cambios ajenos
+  servidorPor: '',
+
+  /** ¿El panel se está sirviendo desde el servidor con base de datos? */
+  async probarServidor() {
+    if (location.protocol === 'file:') return false;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 2500);
+      const r = await fetch('api/info', { signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(t);
+      if (!r.ok) return false;
+      const info = await r.json();
+      return !!info.ok;
+    } catch (e) { return false; }
+  },
 
   async abrir() {
+    if (await Store.probarServidor()) { Store.modo = 'servidor'; return Store.modo; }
     try {
       this.db = await new Promise((res, rej) => {
         const req = indexedDB.open('panel-operaciones', 1);
@@ -241,6 +258,30 @@ const Store = {
   _tx(store, modo) { return this.db.transaction(store, modo).objectStore(store); },
 
   async set(store, key, val) {
+    if (this.modo === 'servidor') {
+      if (store === 'files') {
+        await fetch('api/archivo/' + encodeURIComponent(key), {
+          method: 'PUT',
+          headers: { 'Content-Type': val.type || 'application/pdf', 'X-Nombre': encodeURIComponent(val.name || '') },
+          body: val
+        });
+        return true;
+      }
+      const r = await fetch('api/estado', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: Store.version, datos: val })
+      });
+      if (r.status === 409) {
+        // Otro equipo guardó mientras tanto: se avisa y se recarga lo suyo
+        const otro = await r.json();
+        Store.version = otro.version;
+        throw new Error('Otro equipo (' + (otro.actualizadoPor || 'desconocido') + ') guardó cambios. Recarga la página para verlos.');
+      }
+      if (!r.ok) throw new Error('El servidor rechazó el guardado');
+      Store.version = (await r.json()).version;
+      return true;
+    }
     if (this.modo === 'indexeddb') {
       return new Promise((res, rej) => {
         const r = this._tx(store, 'readwrite').put(val, key);
@@ -256,6 +297,18 @@ const Store = {
   },
 
   async get(store, key) {
+    if (this.modo === 'servidor') {
+      if (store === 'files') {
+        const r = await fetch('api/archivo/' + encodeURIComponent(key));
+        return r.ok ? await r.blob() : undefined;
+      }
+      const r = await fetch('api/estado', { cache: 'no-store' });
+      if (!r.ok) return undefined;
+      const info = await r.json();
+      Store.version = info.version;
+      Store.servidorPor = info.actualizadoPor || '';
+      return info.datos && Object.keys(info.datos).length ? info.datos : undefined;
+    }
     if (this.modo === 'indexeddb') {
       return new Promise((res, rej) => {
         const r = this._tx(store, 'readonly').get(key);
@@ -273,6 +326,10 @@ const Store = {
   },
 
   async del(store, key) {
+    if (this.modo === 'servidor') {
+      if (store === 'files') await fetch('api/archivo/' + encodeURIComponent(key), { method: 'DELETE' });
+      return true;
+    }
     if (this.modo === 'indexeddb') {
       return new Promise((res) => { const r = this._tx(store, 'readwrite').delete(key); r.onsuccess = () => res(true); r.onerror = () => res(false); });
     }
@@ -281,6 +338,10 @@ const Store = {
   },
 
   async limpiar() {
+    if (this.modo === 'servidor') {
+      await Store.set('kv', 'state', {});
+      return;
+    }
     if (this.modo === 'indexeddb') {
       await new Promise(res => { const r = this.db.transaction(['kv', 'files'], 'readwrite'); r.objectStore('kv').clear(); r.objectStore('files').clear(); r.oncomplete = () => res(); r.onerror = () => res(); });
     } else if (this.modo === 'localstorage') {
@@ -340,13 +401,17 @@ const App = {
     App.pintarIdentidad();
 
     const pill = document.getElementById('storagePill');
-    pill.textContent = modo === 'indexeddb' ? '💾 Guardado en este equipo'
+    pill.textContent = modo === 'servidor' ? '🗄 Compartido en la base de datos'
+      : modo === 'indexeddb' ? '💾 Guardado solo en este equipo'
       : modo === 'localstorage' ? '💾 Guardado (modo básico)' : '⚠ Sin guardado permanente';
-    pill.title = modo === 'indexeddb'
-      ? 'La información queda almacenada en este navegador (IndexedDB).'
-      : modo === 'localstorage'
-        ? 'Se usa almacenamiento básico: los PDF grandes pueden no caber. Exporta un respaldo con frecuencia.'
-        : 'Este navegador bloqueó el almacenamiento: la información se perderá al cerrar. Exporta un respaldo.';
+    pill.title = modo === 'servidor'
+      ? 'Todo se guarda en PostgreSQL: cualquiera que abra esta dirección ve la misma información.'
+      : modo === 'indexeddb'
+        ? 'La información queda en este navegador. Para que otros la vean, abre el panel desde el servidor.'
+        : modo === 'localstorage'
+          ? 'Se usa almacenamiento básico: los PDF grandes pueden no caber. Exporta un respaldo con frecuencia.'
+          : 'Este navegador bloqueó el almacenamiento: la información se perderá al cerrar. Exporta un respaldo.';
+    if (modo === 'servidor') App.vigilarCambios();
 
     Rend.init(); Agentes.init(); Turnos.init(); Conocimientos.init();
     App.pintarAjustes();
@@ -434,7 +499,35 @@ const App = {
 
   async guardarYa() {
     try { await Store.set('kv', 'state', JSON.parse(JSON.stringify(State))); }
-    catch (e) { App.toast('No se pudo guardar', 'El navegador rechazó el almacenamiento. Exporta un respaldo desde Ajustes.', 'bad'); }
+    catch (e) {
+      App.toast('No se pudo guardar', e.message ||
+        'El navegador rechazó el almacenamiento. Exporta un respaldo desde Ajustes.', 'bad');
+    }
+  },
+
+  /**
+   * Con base de datos, varios equipos consultan a la vez. Cada 15 segundos se
+   * comprueba si alguien guardó algo nuevo y se ofrece traerlo.
+   */
+  vigilarCambios() {
+    let avisando = false;
+    setInterval(async () => {
+      if (avisando || document.hidden) return;
+      try {
+        const r = await fetch('api/version', { cache: 'no-store' });
+        if (!r.ok) return;
+        const info = await r.json();
+        if (info.version === Store.version) return;
+        avisando = true;
+        const cont = document.getElementById('toasts');
+        const el = document.createElement('div');
+        el.className = 'toast toast--ok';
+        el.innerHTML = '<strong>Hay información nueva</strong>' +
+          (info.actualizadoPor ? 'Cargada desde ' + U.esc(info.actualizadoPor) + '. ' : '') +
+          '<button class="btn btn--primary btn--sm" style="margin-top:8px" onclick="location.reload()">Actualizar</button>';
+        cont.appendChild(el);
+      } catch (e) { /* el servidor puede estar reiniciándose */ }
+    }, 15000);
   },
 
   /* --- Avisos --- */
@@ -534,7 +627,40 @@ const App = {
 
   cargarDemo() { Demo.cargar(); },
 
+  /** Ficha de la base de datos compartida (solo cuando el panel corre en el servidor). */
+  async pintarServidor() {
+    const card = document.getElementById('ajServidorCard');
+    if (!card) return;
+    if (Store.modo !== 'servidor') { card.hidden = true; return; }
+    card.hidden = false;
+    try {
+      const info = await (await fetch('api/info', { cache: 'no-store' })).json();
+      const filas = [
+        ['Dirección para el equipo', location.origin],
+        ['Base de datos', info.base],
+        ['Tamaño de la base', info.tamano_bd],
+        ['Documentos PDF', info.archivos + ' (' + U.peso(Number(info.peso_archivos)) + ')'],
+        ['Última carga', info.actualizado ? new Date(info.actualizado).toLocaleString('es-CO') : '—'],
+        ['Hecha desde', info.por || '—'],
+        ['Copias de seguridad guardadas', info.copias]
+      ];
+      document.getElementById('ajServidor').innerHTML = '<table class="data"><tbody>' +
+        filas.map(f => '<tr><td>' + f[0] + '</td><td class="num"><strong>' + U.esc(String(f[1])) + '</strong></td></tr>').join('') +
+        '</tbody></table>';
+    } catch (e) {
+      document.getElementById('ajServidor').innerHTML = '<div class="empty">No se pudo consultar el servidor.</div>';
+    }
+  },
+
+  copiarDireccion() {
+    const dir = location.origin;
+    navigator.clipboard.writeText(dir)
+      .then(() => App.toast('Dirección copiada', dir + ' — pásala a tu equipo por chat o correo.', 'ok'))
+      .catch(() => App.toast('Copia esta dirección', dir, 'ok'));
+  },
+
   pintarAjustes() {
+    App.pintarServidor();
     const host = document.getElementById('ajStats');
     if (!host) return;
     const nArch = State.conocimientos.reduce((a, t) => a + (t.procesos || []).reduce((b, p) => b + (p.archivos || []).length, 0), 0);
