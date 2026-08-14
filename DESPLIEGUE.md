@@ -44,13 +44,13 @@ Todos entran como **solo consulta**. Para darte a ti permiso de cargar, ve a
 **SQL Editor** y ejecuta, con tu correo:
 
 ```sql
-update panel_perfiles set rol = 'editor' where nombre = 'tucorreo@empresa.com';
+insert into panel_editores (correo, nota) values ('tucorreo@empresa.com', 'Supervisor') on conflict (correo) do nothing;
 ```
 
 Para ver quién tiene qué permiso:
 
 ```sql
-select nombre, rol from panel_perfiles order by rol, nombre;
+select correo, nota from panel_editores order by correo;
 ```
 
 ## 4. Conectar el panel

@@ -9,6 +9,11 @@
 -- Se puede volver a ejecutar sin problema: no borra nada.
 -- =========================================================================
 
+-- Versiones anteriores creaban un disparador sobre auth.users que impedía dar
+-- de alta usuarios desde el panel de Supabase. Se retira.
+drop trigger if exists panel_al_crear_usuario on auth.users;
+drop function if exists panel_nuevo_usuario();
+
 -- ------------------------------------------------------------------ Tablas
 
 -- Todo el contenido del panel en una sola fila de JSON.
@@ -24,12 +29,11 @@ create table if not exists panel_estado (
 insert into panel_estado (id, datos) values (1, '{}'::jsonb)
   on conflict (id) do nothing;
 
--- Quién puede cargar y quién solo mirar.
-create table if not exists panel_perfiles (
-  usuario_id uuid primary key references auth.users (id) on delete cascade,
-  nombre     text,
-  rol        text not null default 'consulta' check (rol in ('editor', 'consulta')),
-  creado     timestamptz not null default now()
+-- Quién puede cargar información. Quien no esté aquí solo consulta.
+create table if not exists panel_editores (
+  correo text primary key,
+  nota   text,
+  creado timestamptz not null default now()
 );
 
 -- Cada guardado deja una copia, por si hay que volver atrás.
@@ -44,32 +48,19 @@ create index if not exists panel_historial_fecha on panel_historial (guardado de
 
 -- ------------------------------------------------------- Quién es cada uno
 
--- Al registrarse alguien nuevo entra como "consulta"; tú lo cambias a "editor"
--- desde la tabla panel_perfiles si debe poder cargar.
-create or replace function panel_nuevo_usuario()
-returns trigger language plpgsql security definer as $$
-begin
-  insert into panel_perfiles (usuario_id, nombre, rol)
-  values (new.id, new.email, 'consulta')
-  on conflict (usuario_id) do nothing;
-  return new;
-end $$;
-
-drop trigger if exists panel_al_crear_usuario on auth.users;
-create trigger panel_al_crear_usuario
-  after insert on auth.users
-  for each row execute function panel_nuevo_usuario();
-
--- Registra a los usuarios que ya existían antes de crear el trigger
-insert into panel_perfiles (usuario_id, nombre, rol)
-select id, email, 'consulta' from auth.users
-on conflict (usuario_id) do nothing;
+-- Correo de quien está usando el panel en este momento
+create or replace function panel_correo()
+returns text language sql stable as $$
+  select lower(coalesce(
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email',
+    ''));
+$$;
 
 create or replace function panel_es_editor()
-returns boolean language sql stable security definer as $$
+returns boolean language sql stable security definer set search_path = public as $$
   select exists (
-    select 1 from panel_perfiles
-    where usuario_id = auth.uid() and rol = 'editor'
+    select 1 from panel_editores
+    where lower(correo) = panel_correo() and panel_correo() <> ''
   );
 $$;
 
@@ -78,13 +69,13 @@ $$;
 -- no da acceso a la información.
 
 alter table panel_estado    enable row level security;
-alter table panel_perfiles  enable row level security;
+alter table panel_editores  enable row level security;
 alter table panel_historial enable row level security;
 
-drop policy if exists "leer estado"      on panel_estado;
-drop policy if exists "escribir estado"  on panel_estado;
-drop policy if exists "leer perfil"      on panel_perfiles;
-drop policy if exists "leer historial"   on panel_historial;
+drop policy if exists "leer estado"        on panel_estado;
+drop policy if exists "escribir estado"    on panel_estado;
+drop policy if exists "leer editores"      on panel_editores;
+drop policy if exists "leer historial"     on panel_historial;
 drop policy if exists "escribir historial" on panel_historial;
 
 -- Cualquiera que haya entrado puede consultar
@@ -95,8 +86,8 @@ create policy "leer estado" on panel_estado
 create policy "escribir estado" on panel_estado
   for update to authenticated using (panel_es_editor()) with check (panel_es_editor());
 
-create policy "leer perfil" on panel_perfiles
-  for select to authenticated using (usuario_id = auth.uid() or panel_es_editor());
+create policy "leer editores" on panel_editores
+  for select to authenticated using (true);
 
 create policy "leer historial" on panel_historial
   for select to authenticated using (panel_es_editor());
@@ -108,7 +99,7 @@ create policy "escribir historial" on panel_historial
 -- El panel llama a esta función en vez de escribir la tabla directamente:
 -- así se controla que nadie pise el trabajo de otro y queda la copia.
 create or replace function panel_guardar(p_version bigint, p_datos jsonb)
-returns jsonb language plpgsql security definer as $$
+returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_actual bigint;
   v_quien  text;
@@ -123,7 +114,7 @@ begin
     return jsonb_build_object('ok', false, 'error', 'desactualizado', 'version', v_actual);
   end if;
 
-  select coalesce(nombre, 'alguien') into v_quien from panel_perfiles where usuario_id = auth.uid();
+  v_quien := coalesce(nullif(panel_correo(), ''), 'alguien');
 
   update panel_estado
      set datos = p_datos, version = v_actual + 1,
@@ -143,10 +134,11 @@ grant execute on function panel_guardar(bigint, jsonb) to authenticated;
 
 -- Consultar la versión sin descargar todo (para saber si alguien cargó algo)
 create or replace function panel_version()
-returns jsonb language sql stable security definer as $$
+returns jsonb language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'version', version, 'actualizado', actualizado, 'por', actualizado_por,
-    'rol', coalesce((select rol from panel_perfiles where usuario_id = auth.uid()), 'consulta'))
+    'correo', panel_correo(),
+    'rol', case when panel_es_editor() then 'editor' else 'consulta' end)
   from panel_estado where id = 1;
 $$;
 
@@ -204,14 +196,14 @@ where id = 1;
 
 create or replace view v_resultados as
 select
-  r->>'fecha'                       as fecha,
-  r->>'agente'                      as agente,
-  r->>'doc'                         as documento,
-  r->>'skill'                       as skill,
-  r->>'performance'                 as performance,
-  nullif(r->>'pesoInforme','')::numeric as peso_informe,
-  v.key                             as indicador_id,
-  nullif(v.value::text,'null')::numeric as valor,
+  r->>'fecha'                            as fecha,
+  r->>'agente'                           as agente,
+  r->>'doc'                              as documento,
+  r->>'skill'                            as skill,
+  r->>'performance'                      as performance,
+  nullif(r->>'pesoInforme','')::numeric  as peso_informe,
+  v.key                                  as indicador_id,
+  nullif(v.value::text,'null')::numeric  as valor,
   nullif(r->'metas'->>v.key,'')::numeric as meta
 from panel_estado,
      jsonb_array_elements(coalesce(datos->'registros', '[]'::jsonb)) as r,
@@ -258,9 +250,13 @@ from panel_estado, jsonb_array_elements(coalesce(datos->'turnos', '[]'::jsonb)) 
 where id = 1;
 
 -- =========================================================================
--- Listo. Ahora, en Authentication → Users, crea los usuarios del equipo.
--- Después, para darte permiso de cargar, ejecuta:
+-- Último paso: apúntate como editor para poder cargar información.
+-- Cambia el correo por el tuyo (el mismo con el que creaste el usuario):
 --
---   update panel_perfiles set rol = 'editor'
---    where nombre = 'tu-correo@ejemplo.com';
+--   insert into panel_editores (correo, nota)
+--   values ('tucorreo@empresa.com', 'Supervisor')
+--   on conflict (correo) do nothing;
+--
+-- Los demás no hace falta registrarlos: con solo tener usuario ya pueden
+-- consultar, y al no estar en esta tabla no pueden modificar nada.
 -- =========================================================================
