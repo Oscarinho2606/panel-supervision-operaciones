@@ -10,12 +10,13 @@ información se guarda localmente: nada viaja a internet ni a ningún servidor.
 
 ## Tres formas de usarlo
 
-### 1. Publicado en internet — una dirección para todos
+### 1. En línea — una dirección para todos
 
-Alojado en **Render** con la base de datos en **Supabase**: una dirección fija que
-funciona desde cualquier lugar, aunque tu equipo esté apagado. Entras con
-contraseña y hay dos perfiles: **editor** (carga y modifica) y **consulta** (solo
-mira, sin poder tocar nada).
+**GitHub Pages + Supabase**, sin servidores de por medio: una dirección fija que
+funciona desde cualquier lugar, aunque tu equipo esté apagado. Se entra con
+usuario y contraseña, y hay dos perfiles: **editor** (carga y modifica) y
+**consulta** (solo mira). Cuando cargas un informe, a quien tenga la página
+abierta le llega el aviso en el momento.
 
 Los pasos están en **[DESPLIEGUE.md](DESPLIEGUE.md)**.
 

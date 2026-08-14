@@ -231,6 +231,8 @@ const Store = {
   },
 
   async abrir() {
+    // 1º Supabase si está configurado, 2º servidor propio, 3º el navegador
+    if (typeof Nube !== 'undefined' && Nube.iniciar()) { Store.modo = 'nube'; return Store.modo; }
     if (await Store.probarServidor()) { Store.modo = 'servidor'; return Store.modo; }
     try {
       this.db = await new Promise((res, rej) => {
@@ -258,6 +260,10 @@ const Store = {
   _tx(store, modo) { return this.db.transaction(store, modo).objectStore(store); },
 
   async set(store, key, val) {
+    if (this.modo === 'nube') {
+      if (store === 'files') return await Nube.subirArchivo(key, val, val.name);
+      return await Nube.guardarEstado(val);
+    }
     if (this.modo === 'servidor') {
       if (store === 'files') {
         await fetch('api/archivo/' + encodeURIComponent(key), {
@@ -297,6 +303,10 @@ const Store = {
   },
 
   async get(store, key) {
+    if (this.modo === 'nube') {
+      if (store === 'files') return await Nube.bajarArchivo(key);
+      return await Nube.leerEstado();
+    }
     if (this.modo === 'servidor') {
       if (store === 'files') {
         const r = await fetch('api/archivo/' + encodeURIComponent(key));
@@ -326,6 +336,10 @@ const Store = {
   },
 
   async del(store, key) {
+    if (this.modo === 'nube') {
+      if (store === 'files') await Nube.borrarArchivo(key);
+      return true;
+    }
     if (this.modo === 'servidor') {
       if (store === 'files') await fetch('api/archivo/' + encodeURIComponent(key), { method: 'DELETE' });
       return true;
@@ -338,7 +352,7 @@ const Store = {
   },
 
   async limpiar() {
-    if (this.modo === 'servidor') {
+    if (this.modo === 'nube' || this.modo === 'servidor') {
       await Store.set('kv', 'state', {});
       return;
     }
@@ -391,8 +405,15 @@ const App = {
   rol: 'editor',        // sin servidor, quien abre el panel manda sobre sus datos
 
   /* --------------------------- Acceso ------------------------------------ */
-  /** Con servidor, hay que entrar con contraseña antes de ver nada. */
+  /** Hay que entrar antes de ver nada, tanto en Supabase como en el servidor propio. */
   async pedirAcceso() {
+    if (Store.modo === 'nube') {
+      if (await Nube.comprobarSesion()) { App.rol = Nube.rol; return true; }
+      document.getElementById('campoCorreo').hidden = false;
+      document.getElementById('login').hidden = false;
+      setTimeout(() => document.getElementById('loginCorreo').focus(), 80);
+      return false;
+    }
     try {
       const r = await fetch('api/sesion', { cache: 'no-store' });
       const s = await r.json();
@@ -406,34 +427,43 @@ const App = {
     ev.preventDefault();
     const clave = document.getElementById('loginClave').value;
     const error = document.getElementById('loginError');
+    const boton = ev.target.querySelector('button[type=submit]');
     error.hidden = true;
+    boton.disabled = true; boton.textContent = 'Entrando…';
     try {
-      const r = await fetch('api/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clave: clave })
-      });
-      const res = await r.json();
-      if (!r.ok) { error.textContent = res.error || 'No se pudo entrar'; error.hidden = false; return; }
-      document.getElementById('login').hidden = true;
+      if (Store.modo === 'nube') {
+        await Nube.entrar(document.getElementById('loginCorreo').value.trim(), clave);
+      } else {
+        const r = await fetch('api/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clave: clave })
+        });
+        const res = await r.json();
+        if (!r.ok) throw new Error(res.error || 'No se pudo entrar');
+      }
       location.reload();
     } catch (e) {
-      error.textContent = 'No se pudo conectar con el servidor'; error.hidden = false;
+      error.textContent = e.message || 'No se pudo entrar';
+      error.hidden = false;
+      boton.disabled = false; boton.textContent = 'Entrar';
     }
   },
 
   async salir() {
-    await fetch('api/salir', { method: 'POST' });
+    if (Store.modo === 'nube') Nube.salir();
+    else await fetch('api/salir', { method: 'POST' });
     location.reload();
   },
 
   /** Deja el panel en modo consulta: se ocultan las acciones que modifican. */
   aplicarRol() {
     document.body.classList.toggle('rol-consulta', App.rol !== 'editor');
-    if (Store.modo !== 'servidor') return;
+    if (Store.modo !== 'servidor' && Store.modo !== 'nube') return;
     const acciones = document.querySelector('.app-bar__actions');
     if (acciones && !document.getElementById('pillRol')) {
+      const quien = Store.modo === 'nube' && Nube.sesion ? Nube.sesion.correo : '';
       acciones.insertAdjacentHTML('afterbegin',
-        '<span class="pill-rol" id="pillRol">' +
+        '<span class="pill-rol" id="pillRol" title="' + U.esc(quien) + '">' +
         (App.rol === 'editor' ? '✎ Puedes cargar' : '👁 Solo consulta') + '</span>' +
         '<button class="btn btn--ghost" type="button" onclick="App.salir()" title="Cerrar la sesión">Salir</button>');
     }
@@ -461,10 +491,13 @@ const App = {
     App.aplicarRol();
 
     const pill = document.getElementById('storagePill');
-    pill.textContent = modo === 'servidor' ? '🗄 Compartido en la base de datos'
+    pill.textContent = modo === 'nube' ? '☁ En línea · todos ven lo mismo'
+      : modo === 'servidor' ? '🗄 Compartido en la base de datos'
       : modo === 'indexeddb' ? '💾 Guardado solo en este equipo'
       : modo === 'localstorage' ? '💾 Guardado (modo básico)' : '⚠ Sin guardado permanente';
-    pill.title = modo === 'servidor'
+    pill.title = modo === 'nube'
+      ? 'Todo se guarda en Supabase: quien abra el enlace ve la misma información, al instante.'
+      : modo === 'servidor'
       ? 'Todo se guarda en PostgreSQL: cualquiera que abra esta dirección ve la misma información.'
       : modo === 'indexeddb'
         ? 'La información queda en este navegador. Para que otros la vean, abre el panel desde el servidor.'
@@ -472,6 +505,7 @@ const App = {
           ? 'Se usa almacenamiento básico: los PDF grandes pueden no caber. Exporta un respaldo con frecuencia.'
           : 'Este navegador bloqueó el almacenamiento: la información se perderá al cerrar. Exporta un respaldo.';
     if (modo === 'servidor') App.vigilarCambios();
+    if (modo === 'nube') Nube.escuchar(info => App.avisarCambio(info.por));
 
     Rend.init(); Agentes.init(); Turnos.init(); Conocimientos.init();
     App.pintarAjustes();
@@ -570,24 +604,28 @@ const App = {
    * comprueba si alguien guardó algo nuevo y se ofrece traerlo.
    */
   vigilarCambios() {
-    let avisando = false;
     setInterval(async () => {
-      if (avisando || document.hidden) return;
+      if (App._avisado || document.hidden) return;
       try {
         const r = await fetch('api/version', { cache: 'no-store' });
         if (!r.ok) return;
         const info = await r.json();
-        if (info.version === Store.version) return;
-        avisando = true;
-        const cont = document.getElementById('toasts');
-        const el = document.createElement('div');
-        el.className = 'toast toast--ok';
-        el.innerHTML = '<strong>Hay información nueva</strong>' +
-          (info.actualizadoPor ? 'Cargada desde ' + U.esc(info.actualizadoPor) + '. ' : '') +
-          '<button class="btn btn--primary btn--sm" style="margin-top:8px" onclick="location.reload()">Actualizar</button>';
-        cont.appendChild(el);
+        if (info.version !== Store.version) App.avisarCambio(info.actualizadoPor);
       } catch (e) { /* el servidor puede estar reiniciándose */ }
     }, 15000);
+  },
+
+  _avisado: false,
+  /** Aviso de que otra persona cargó información nueva. */
+  avisarCambio(quien) {
+    if (App._avisado) return;
+    App._avisado = true;
+    const el = document.createElement('div');
+    el.className = 'toast toast--ok';
+    el.innerHTML = '<strong>Hay información nueva</strong>' +
+      (quien ? 'Cargada por ' + U.esc(quien) + '. ' : '') +
+      '<button class="btn btn--primary btn--sm" style="margin-top:8px" onclick="location.reload()">Ver lo último</button>';
+    document.getElementById('toasts').appendChild(el);
   },
 
   /* --- Avisos --- */

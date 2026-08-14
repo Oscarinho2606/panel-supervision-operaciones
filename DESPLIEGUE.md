@@ -1,117 +1,134 @@
-# Publicar el panel en internet
+# Publicar el panel para todo el equipo
 
 Al terminar tendrás **una dirección fija** que puedes enviarle a quien sea. Todos
-verán la misma información, sin importar dónde estén ni si tu equipo está encendido.
+verán la misma información al instante, sin instalar nada y sin que tu equipo
+tenga que estar encendido.
 
-- **Supabase** guarda la información (PostgreSQL gestionado)
-- **Render** ejecuta el panel
+- **GitHub Pages** entrega la página
+- **Supabase** guarda la información
 
-Los dos tienen plan gratuito y no piden tarjeta.
+Los dos son gratuitos y no piden tarjeta.
 
 > **Antes de empezar:** el panel manejará nombres, cédulas y evaluaciones de tus
-> compañeros, y esa información quedará alojada fuera de la empresa. Valídalo con
-> tu jefatura o con TI antes de publicarlo.
+> compañeros, alojados fuera de la empresa. Valídalo con tu jefatura o con TI.
+> El acceso queda protegido con usuario y contraseña, y quien no haya entrado no
+> ve absolutamente nada.
 
 ---
 
-## 1. Crear la base de datos en Supabase
+## 1. Crear el proyecto en Supabase
 
-1. Entra a **supabase.com** y crea una cuenta (puedes usar tu cuenta de GitHub).
+1. Entra a **supabase.com** → **Start your project** (puedes usar tu cuenta de GitHub).
 2. **New project**:
    - *Name*: `panel-operaciones`
-   - *Database Password*: genera una y **guárdala**, la necesitas en el paso siguiente
+   - *Database Password*: genera una y guárdala
    - *Region*: la más cercana (por ejemplo *East US*)
-3. Espera un par de minutos a que el proyecto quede listo.
-4. Arriba a la derecha, botón **Connect**.
-5. En **Connection string** elige la pestaña **Session pooler** y copia la línea.
-   Se ve así:
+3. Espera un par de minutos.
 
-   ```
-   postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
-   ```
+## 2. Crear las tablas
 
-6. Reemplaza `[YOUR-PASSWORD]` por la contraseña del paso 2. **Esa línea completa
-   es tu `DATABASE_URL`.**
+1. Menú lateral → **SQL Editor** → **New query**.
+2. Abre el archivo [`supabase/esquema.sql`](supabase/esquema.sql), copia **todo**
+   su contenido, pégalo y pulsa **Run**.
 
-No hace falta crear tablas: el panel las crea solo la primera vez que arranca.
+Eso crea las tablas, los permisos, el depósito de PDF y las vistas de consulta.
+Puedes volver a ejecutarlo cuando quieras: no borra nada.
 
----
+## 3. Crear los usuarios
 
-## 2. Publicar el panel en Render
+1. Menú lateral → **Authentication** → **Users** → **Add user** → *Create new user*.
+2. Crea **el tuyo** con tu correo y una contraseña. Marca **Auto Confirm User**.
+3. Crea los de tu equipo igual (o uno solo compartido, como prefieras).
 
-1. Entra a **render.com** y crea la cuenta con **GitHub**.
-2. **New → Web Service** y elige el repositorio `panel-supervision-operaciones`.
-3. Render detecta la configuración del archivo `render.yaml`. Si te pide los
-   datos a mano, usa estos:
+Todos entran como **solo consulta**. Para darte a ti permiso de cargar, ve a
+**SQL Editor** y ejecuta, con tu correo:
 
-   | Campo | Valor |
-   |---|---|
-   | Root Directory | `servidor` |
-   | Build Command | `npm install` |
-   | Start Command | `npm start` |
-   | Instance Type | `Free` |
-
-4. En **Environment Variables**, agrega las tres:
-
-   | Nombre | Valor |
-   |---|---|
-   | `DATABASE_URL` | la línea que copiaste de Supabase |
-   | `CLAVE_EDITOR` | la contraseña con la que **tú** cargas información |
-   | `CLAVE_CONSULTA` | la contraseña que le das a **quien solo mira** |
-
-   Usa contraseñas largas y distintas entre sí. No reutilices las de la empresa.
-
-5. **Create Web Service** y espera a que termine (2-3 minutos).
-
-Tu dirección queda como:
-
-```
-https://panel-supervision-operaciones.onrender.com
+```sql
+update panel_perfiles set rol = 'editor' where nombre = 'tucorreo@empresa.com';
 ```
 
+Para ver quién tiene qué permiso:
+
+```sql
+select nombre, rol from panel_perfiles order by rol, nombre;
+```
+
+## 4. Conectar el panel
+
+1. En Supabase: **Settings** (el engranaje) → **API**. Copia dos cosas:
+   - **Project URL**
+   - **anon public** (la clave larga)
+2. En este repositorio, abre `assets/js/config.js` y ponlas:
+
+```js
+const SUPABASE = {
+  URL:   'https://abcdefgh.supabase.co',
+  CLAVE: 'eyJhbGciOi...'
+};
+```
+
+3. Guarda y sube el cambio a GitHub.
+
+> Esa clave *anon* está pensada para ir en la página: por sí sola no sirve de
+> nada, porque las tablas exigen haber entrado con usuario y contraseña.
+
+## 5. Listo
+
+Tu dirección es la de GitHub Pages:
+
+```
+https://oscarinho2606.github.io/panel-supervision-operaciones/
+```
+
+Entras con tu correo y contraseña, cargas los Excel, y le pasas a tu equipo esa
+misma dirección con su usuario. Verán lo mismo que tú.
+
+**Cuando cargues algo nuevo, a quien tenga la página abierta le aparece un aviso
+en el momento**, con un botón para ver lo último. No hace falta que recarguen.
+
+Quien entre como *consulta* no ve las pestañas de carga ni los botones de editar
+o borrar, y aunque lo intentara por otro medio, la base de datos rechaza el
+cambio.
+
 ---
 
-## 3. Usarlo
+## Preguntas frecuentes
 
-1. Entra tú con la **clave de editor** y carga el informe y la malla como siempre.
-2. Envíale a tu equipo la dirección y la **clave de consulta**.
+**¿Y si alguien más carga a la vez que yo?**
+El que guarde de segundo recibe un aviso de que hubo cambios y debe recargar
+antes de continuar, así no se pisa el trabajo.
 
-Ellos verán exactamente lo que cargaste, pero **no podrán cargar, editar ni
-borrar nada**: se les ocultan las pestañas de carga, los botones de edición y las
-acciones de Ajustes. En la barra superior aparece «👁 Solo consulta».
+**¿Se puede deshacer una carga equivocada?**
+Sí. La tabla `panel_historial` guarda las 50 últimas versiones:
 
-Cuando cargues algo nuevo, a quien tenga la página abierta le sale un aviso con
-un botón para actualizar.
+```sql
+select id, version, guardado, guardado_por from panel_historial order by id desc limit 10;
+-- para volver a una anterior:
+update panel_estado set datos = (select datos from panel_historial where id = 123), version = version + 1 where id = 1;
+```
 
----
+**¿Supabase se apaga si no lo uso?**
+El plan gratuito pausa el proyecto tras una semana sin actividad. Se reactiva con
+un botón desde supabase.com y no se pierde nada.
 
-## Cosas que conviene saber del plan gratuito
-
-**Render duerme el servicio tras 15 minutos sin visitas.** La primera persona que
-entre después de un rato esperará entre 30 y 60 segundos a que despierte. Las
-siguientes entran al instante. Avísale a tu equipo para que no crean que falló.
-
-**Supabase pausa el proyecto tras una semana sin actividad.** Si eso pasa, entra a
-supabase.com y pulsa *Restore*; la información no se pierde. Con uso semanal no
-ocurre.
-
-**Cambiar las contraseñas:** en Render, *Environment* → editas la variable →
-*Save*. El servicio se reinicia solo y todos deben volver a entrar.
+**¿Puedo seguir usándolo sin internet?**
+Sí. Abriendo `index.html` directamente en tu equipo funciona con el
+almacenamiento del navegador, aparte de la nube.
 
 ---
 
-## Respaldos
+## Consultar los datos con SQL
 
-Aunque Supabase guarda copias, conviene que tengas las tuyas:
+Dentro de Supabase, en el **SQL Editor**:
 
-- **Ajustes → Descargar respaldo completo** genera un `.json` con todo.
-- La base guarda además las **50 últimas versiones** en la tabla `historial`, por
-  si hay que deshacer una carga equivocada.
+```sql
+-- Puntaje de cada agente
+select * from v_puntajes order by puntaje;
 
----
+-- Los de INB por debajo del 90 %
+select agente, puntaje from v_puntajes where skill = 'INB' and puntaje < 90 order by puntaje;
 
-## Seguir usándolo dentro de la oficina
-
-El modo local sigue funcionando igual: `Iniciar panel.bat` levanta el panel contra
-el PostgreSQL de tu equipo. Son dos instalaciones independientes con información
-separada; para pasar datos de una a otra, usa el respaldo `.json`.
+-- Detalle de un indicador
+select agente, valor, meta, round(cumplimiento_pct,1) as cumple
+from v_resultados_detalle where indicador = 'AHT' order by cumplimiento_pct;
+```
